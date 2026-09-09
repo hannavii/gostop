@@ -1,0 +1,3616 @@
+.game {
+  width: 100%;
+  height: 100dvh;
+
+  display: grid;
+  grid-template-rows: 27% 46% 27%;
+
+  padding: 10px 20px;
+
+  background-color: #1f6b45;
+  color: white;
+
+  overflow: hidden;
+
+  position: relative;
+}
+
+/* =========================
+   공통 영역
+========================= */
+
+.opponent-area,
+.player-area,
+.table {
+  width: 100%;
+  min-height: 0;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  gap: 6px;
+}
+
+.opponent-area h2,
+.player-area h2,
+.table h2 {
+  margin: 0 0 8px 0;
+
+  font-size: clamp(
+    18px,
+    2.3vh,
+    26px
+  );
+
+  line-height: 1.2;
+
+  flex-shrink: 0;
+}
+
+.opponent-area p,
+.player-area p {
+  margin: 0;
+
+  font-size: clamp(
+    11px,
+    1.5vh,
+    14px
+  );
+}
+
+/* =========================
+   카드
+========================= */
+
+.card,
+.card-back {
+  width: clamp(
+    48px,
+    4.3vw,
+    68px
+  );
+
+  height: clamp(
+    70px,
+    11vh,
+    96px
+  );
+
+  flex: 0 1 auto;
+
+  border: 2px solid #222;
+  border-radius: 7px;
+}
+
+.card {
+  padding: 0;
+
+  background-color: white;
+  color: black;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  gap: 4px;
+
+  font-size: clamp(
+    11px,
+    1.7vh,
+    15px
+  );
+}
+
+.card strong {
+  font-size: inherit;
+}
+
+.card span {
+  font-size: inherit;
+}
+
+.card-back {
+  background-color: #c21f32;
+}
+
+/* =========================
+   상대 / 내 패
+========================= */
+
+.card-row {
+  width: 100%;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  flex-wrap: nowrap;
+
+  gap: clamp(
+    3px,
+    0.6vw,
+    8px
+  );
+}
+
+.player-area .card {
+  cursor: pointer;
+
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.player-area .card:hover {
+  transform: translateY(-6px);
+
+  box-shadow:
+    0 5px 10px
+    rgb(0 0 0 / 20%);
+}
+
+.game.is-animating
+.player-area
+.card {
+  cursor: default;
+}
+
+.game.is-animating
+.player-area
+.card:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* =========================
+   중앙 게임판
+========================= */
+
+.table {
+  justify-content: center;
+
+  padding-top: 8px;
+
+  position: relative;
+
+  z-index: 10;
+}
+
+.table-content {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  gap: clamp(
+    14px,
+    2vw,
+    28px
+  );
+
+  min-height: 0;
+}
+
+.floor-cards {
+  display: grid;
+
+  grid-template-columns:
+    repeat(4, auto);
+
+  justify-content: center;
+  align-content: center;
+
+  gap: clamp(
+    3px,
+    0.6vw,
+    7px
+  );
+}
+
+/* =========================
+   더미
+========================= */
+
+.draw-pile-area {
+  flex-shrink: 0;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  gap: 4px;
+}
+
+.draw-pile-area span {
+  white-space: nowrap;
+
+  font-size: clamp(
+    10px,
+    1.5vh,
+    13px
+  );
+}
+
+/* =========================
+   시작 버튼
+========================= */
+
+.start-button {
+  position: fixed;
+
+  top: 10px;
+  left: 10px;
+
+  z-index: 100;
+
+  padding: 9px 15px;
+
+  border: none;
+  border-radius: 8px;
+
+  background-color: white;
+  color: #1f6b45;
+
+  font-size: 14px;
+  font-weight: bold;
+
+  cursor: pointer;
+
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+}
+
+.start-button:hover:not(:disabled) {
+  background-color: #eeeeee;
+
+  transform: translateY(-1px);
+}
+
+.start-button:disabled {
+  opacity: 0.45;
+
+  cursor: default;
+}
+
+/* =========================
+   선택 가능한 바닥패
+========================= */
+
+.card.selectable {
+  outline:
+    4px solid #ffd43b;
+
+  outline-offset: 2px;
+
+  cursor: pointer;
+
+  transform:
+    translateY(-4px);
+}
+
+/* =========================
+   안내 메시지
+========================= */
+
+.choice-message {
+  position: fixed;
+
+  top: 50%;
+  left: 20px;
+
+  transform:
+    translateY(-50%);
+
+  max-width: 180px;
+
+  padding: 12px 14px;
+
+  border-radius: 8px;
+
+  background-color:
+    rgb(0 0 0 / 75%);
+
+  color: white;
+
+  font-size: 14px;
+  line-height: 1.5;
+
+  z-index: 120;
+}
+
+.turn-message {
+  position: fixed;
+
+  right: 14px;
+  top: 14px;
+
+  max-width: 280px;
+
+  padding: 9px 12px;
+
+  border-radius: 7px;
+
+  background-color:
+    rgb(0 0 0 / 50%);
+
+  color: white;
+
+  font-size: 12px;
+  line-height: 1.4;
+
+  z-index: 120;
+}
+
+/* =========================
+   카드 내부 텍스트
+========================= */
+
+.card-month {
+  font-size: clamp(
+    10px,
+    1.4vh,
+    13px
+  );
+
+  font-weight: 600;
+}
+
+.card-type {
+  font-size: clamp(
+    12px,
+    1.8vh,
+    16px
+  );
+
+  font-weight: 800;
+}
+
+.card-index {
+  font-size: clamp(
+    9px,
+    1.2vh,
+    11px
+  );
+
+  opacity: 0.55;
+}
+
+/* =========================
+   카드 종류
+========================= */
+
+.card--gwang .card-type {
+  color: #d18b00;
+}
+
+.card--animal .card-type {
+  color: #246a9c;
+}
+
+.card--ribbon .card-type {
+  color: #c62f43;
+}
+
+.card--pi .card-type {
+  color: #555;
+}
+
+/* =========================================
+   먹은 패 패널
+========================================= */
+
+.captured-panel {
+  position: fixed;
+
+  top: 50%;
+
+  transform:
+    translateY(-50%);
+
+  width: clamp(
+    190px,
+    18vw,
+    260px
+  );
+
+  padding:
+    12px 12px 10px;
+
+  border:
+    1px solid
+    rgb(255 255 255 / 16%);
+
+  border-radius: 12px;
+
+  background:
+    rgb(0 0 0 / 18%);
+
+  backdrop-filter:
+    blur(3px);
+
+  -webkit-backdrop-filter:
+    blur(3px);
+
+  z-index: 25;
+}
+
+.captured-panel--left {
+  left: 18px;
+}
+
+.captured-panel--right {
+  right: 18px;
+}
+
+/* 패널 제목 */
+
+.captured-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  gap: 8px;
+
+  margin-bottom: 9px;
+
+  padding-bottom: 7px;
+
+  border-bottom:
+    1px solid
+    rgb(255 255 255 / 15%);
+
+  font-size: 13px;
+}
+
+.captured-panel-header strong {
+  font-size: 14px;
+}
+
+.captured-panel-header span {
+  opacity: 0.65;
+
+  font-size: 11px;
+}
+
+/* =========================
+   광 / 열끗 / 띠 / 피
+========================= */
+
+.captured-groups {
+  display: flex;
+  flex-direction: column;
+
+  gap: 7px;
+}
+
+.captured-row {
+  display: grid;
+
+  grid-template-columns:
+    34px 1fr;
+
+  align-items: center;
+
+  min-height: 33px;
+}
+
+.captured-row-name {
+  font-size: 11px;
+  font-weight: 700;
+
+  opacity: 0.75;
+}
+
+/* =========================
+   작은 먹은 카드
+========================= */
+
+.captured-card-stack {
+  display: flex;
+  align-items: center;
+
+  min-width: 0;
+
+  padding-left: 1px;
+}
+
+.captured-empty {
+  font-size: 12px;
+
+  opacity: 0.25;
+}
+
+.captured-mini-card {
+  width: 30px;
+  height: 39px;
+
+  flex-shrink: 0;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  border:
+    1px solid
+    rgb(0 0 0 / 70%);
+
+  border-radius: 4px;
+
+  background-color: white;
+  color: #222;
+
+  box-shadow:
+    1px 1px 2px
+    rgb(0 0 0 / 25%);
+
+  font-size: 8px;
+
+  position: relative;
+}
+
+.captured-mini-card
++ .captured-mini-card {
+  margin-left: -15px;
+}
+
+.captured-mini-card span {
+  font-size: 7px;
+  line-height: 1;
+}
+
+.captured-mini-card strong {
+  margin-top: 3px;
+
+  font-size: 9px;
+  line-height: 1;
+}
+
+/* 먹은 카드 종류색 */
+
+.captured-mini-card--gwang
+strong {
+  color: #d18b00;
+}
+
+.captured-mini-card--animal
+strong {
+  color: #246a9c;
+}
+
+.captured-mini-card--ribbon
+strong {
+  color: #c62f43;
+}
+
+.captured-mini-card--pi
+strong {
+  color: #555;
+}
+
+/* =========================
+   완성 족보 배지
+========================= */
+
+.captured-badges {
+  display: flex;
+  flex-wrap: wrap;
+
+  gap: 4px;
+
+  margin-top: 9px;
+}
+
+.captured-badge {
+  padding: 3px 6px;
+
+  border-radius: 999px;
+
+  background:
+    rgb(255 255 255 / 15%);
+
+  font-size: 9px;
+  font-weight: 700;
+}
+
+/* =========================
+   점수
+========================= */
+
+.captured-score {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+
+  margin-top: 9px;
+
+  padding-top: 8px;
+
+  border-top:
+    1px solid
+    rgb(255 255 255 / 15%);
+}
+
+.captured-score span {
+  font-size: 10px;
+
+  opacity: 0.65;
+}
+
+.captured-score strong {
+  font-size: 21px;
+}
+
+/* =========================================
+   카드 이동 애니메이션
+========================================= */
+
+.animation-layer {
+  position: fixed;
+
+  inset: 0;
+
+  width: 100vw;
+  height: 100dvh;
+
+  pointer-events: none;
+
+  z-index: 90;
+}
+
+.flying-card {
+  position: absolute;
+
+  width: clamp(
+    48px,
+    4.3vw,
+    68px
+  );
+
+  height: clamp(
+    70px,
+    11vh,
+    96px
+  );
+
+  will-change:
+    left,
+    top,
+    transform,
+    opacity;
+
+  filter:
+    drop-shadow(
+      0 8px 8px
+      rgb(0 0 0 / 35%)
+    );
+}
+
+.flying-card > .card,
+.flying-card > .card-back {
+  width: 100%;
+  height: 100%;
+}
+
+/* =========================
+   내가 카드 내기
+========================= */
+
+.flying-card--player-play {
+  animation:
+    player-play-card
+    520ms
+    cubic-bezier(
+      0.22,
+      0.8,
+      0.25,
+      1
+    )
+    forwards;
+}
+
+@keyframes player-play-card {
+  0% {
+    left: 50%;
+    top: 85%;
+
+    transform:
+      translate(
+        -50%,
+        -50%
+      )
+      scale(0.92)
+      rotate(-3deg);
+
+    opacity: 0.85;
+  }
+
+  60% {
+    left: 50%;
+    top: 54%;
+
+    transform:
+      translate(
+        -50%,
+        -50%
+      )
+      scale(1.08)
+      rotate(1deg);
+
+    opacity: 1;
+  }
+
+  100% {
+    left: 50%;
+    top: 49%;
+
+    transform:
+      translate(
+        -50%,
+        -50%
+      )
+      scale(1);
+
+    opacity: 1;
+  }
+}
+
+/* =========================
+   상대 카드
+========================= */
+
+.flying-card--opponent-play {
+  animation:
+    opponent-play-card
+    600ms
+    cubic-bezier(
+      0.22,
+      0.8,
+      0.25,
+      1
+    )
+    forwards;
+}
+
+@keyframes opponent-play-card {
+  0% {
+    left: 50%;
+    top: 15%;
+
+    transform:
+      translate(
+        -50%,
+        -50%
+      )
+      scale(0.92)
+      rotate(3deg);
+
+    opacity: 0.85;
+  }
+
+  60% {
+    left: 50%;
+    top: 44%;
+
+    transform:
+      translate(
+        -50%,
+        -50%
+      )
+      scale(1.08)
+      rotate(-1deg);
+
+    opacity: 1;
+  }
+
+  100% {
+    left: 50%;
+    top: 49%;
+
+    transform:
+      translate(
+        -50%,
+        -50%
+      )
+      scale(1);
+
+    opacity: 1;
+  }
+}
+
+/* =========================
+   더미 카드
+========================= */
+
+.flying-card--player-draw,
+.flying-card--opponent-draw {
+  animation:
+    draw-card
+    600ms
+    cubic-bezier(
+      0.22,
+      0.8,
+      0.25,
+      1
+    )
+    forwards;
+}
+
+@keyframes draw-card {
+  0% {
+    left: 66%;
+    top: 50%;
+
+    transform:
+      translate(
+        -50%,
+        -50%
+      )
+      scale(0.92)
+      rotate(4deg);
+
+    opacity: 0.9;
+  }
+
+  60% {
+    left: 55%;
+    top: 48%;
+
+    transform:
+      translate(
+        -50%,
+        -50%
+      )
+      scale(1.08)
+      rotate(-2deg);
+
+    opacity: 1;
+  }
+
+  100% {
+    left: 50%;
+    top: 49%;
+
+    transform:
+      translate(
+        -50%,
+        -50%
+      )
+      scale(1);
+
+    opacity: 1;
+  }
+}
+
+/* =========================
+   카드 뒤집기
+========================= */
+
+.flip-card {
+  width: 100%;
+  height: 100%;
+
+  perspective: 800px;
+}
+
+.flip-card-inner {
+  position: relative;
+
+  width: 100%;
+  height: 100%;
+
+  transform-style:
+    preserve-3d;
+
+  transition:
+    transform
+    220ms
+    cubic-bezier(
+      0.4,
+      0,
+      0.2,
+      1
+    );
+}
+
+.flip-card.is-flipped
+.flip-card-inner {
+  transform:
+    rotateY(180deg);
+}
+
+.flying-face {
+  position: absolute;
+
+  inset: 0;
+
+  width: 100%;
+  height: 100%;
+
+  backface-visibility:
+    hidden;
+
+  -webkit-backface-visibility:
+    hidden;
+}
+
+.flying-face
+> .card,
+.flying-face
+> .card-back {
+  width: 100%;
+  height: 100%;
+}
+
+.flying-face--back {
+  transform:
+    rotateY(0deg);
+}
+
+.flying-face--front {
+  transform:
+    rotateY(180deg);
+}
+
+/* =========================
+   작은 화면 대응
+========================= */
+
+@media (max-width: 1100px) {
+  .captured-panel {
+    width: 180px;
+
+    padding: 9px;
+  }
+
+  .captured-panel--left {
+    left: 8px;
+  }
+
+  .captured-panel--right {
+    right: 8px;
+  }
+
+  .captured-row {
+    grid-template-columns:
+      29px 1fr;
+  }
+
+  .captured-mini-card {
+    width: 27px;
+    height: 36px;
+  }
+
+  .captured-mini-card
+  + .captured-mini-card {
+    margin-left: -16px;
+  }
+}
+
+/* =========================
+   모션 최소화 설정
+========================= */
+
+@media (
+  prefers-reduced-motion:
+    reduce
+) {
+  .flying-card {
+    animation-duration:
+      1ms !important;
+  }
+
+  .flip-card-inner {
+    transition-duration:
+      1ms !important;
+  }
+
+  .player-area .card {
+    transition: none;
+  }
+}
+
+/* =========================================
+   GO / STOP
+========================================= */
+
+.go-stop-overlay,
+.game-over-overlay {
+  position: fixed;
+  inset: 0;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  background:
+    rgb(0 0 0 / 48%);
+
+  backdrop-filter:
+    blur(3px);
+
+  -webkit-backdrop-filter:
+    blur(3px);
+
+  z-index: 500;
+}
+
+.go-stop-modal {
+  width: min(
+    360px,
+    calc(100vw - 40px)
+  );
+
+  padding: 28px 28px 24px;
+
+  border:
+    1px solid
+    rgb(255 255 255 / 20%);
+
+  border-radius: 18px;
+
+  background:
+    rgb(20 32 26 / 95%);
+
+  color: white;
+
+  text-align: center;
+
+  box-shadow:
+    0 20px 60px
+    rgb(0 0 0 / 35%);
+}
+
+.go-stop-small {
+  display: block;
+
+  margin-bottom: 2px;
+
+  font-size: 12px;
+
+  opacity: 0.65;
+}
+
+.go-stop-score {
+  display: block;
+
+  margin-bottom: 10px;
+
+  font-size: 40px;
+  line-height: 1.1;
+}
+
+.go-stop-modal p {
+  margin:
+    0 0 22px;
+
+  font-size: 14px;
+}
+
+.go-stop-buttons {
+  display: grid;
+
+  grid-template-columns:
+    1fr 1fr;
+
+  gap: 10px;
+}
+
+.go-stop-buttons button {
+  height: 52px;
+
+  border: none;
+  border-radius: 10px;
+
+  color: white;
+
+  font-size: 17px;
+  font-weight: 800;
+
+  cursor: pointer;
+
+  transition:
+    transform 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.go-stop-buttons button:hover {
+  transform:
+    translateY(-2px);
+}
+
+.go-button {
+  background:
+    #2f82ff;
+}
+
+.stop-button {
+  background:
+    #df394c;
+}
+
+/* =========================================
+   게임 종료
+========================================= */
+
+.game-over-modal {
+  width: min(
+    420px,
+    calc(100vw - 40px)
+  );
+
+  padding: 30px;
+
+  border:
+    1px solid
+    rgb(255 255 255 / 20%);
+
+  border-radius: 18px;
+
+  background:
+    rgb(20 32 26 / 97%);
+
+  color: white;
+
+  text-align: center;
+
+  box-shadow:
+    0 20px 70px
+    rgb(0 0 0 / 40%);
+}
+
+.game-over-label {
+  font-size: 10px;
+
+  letter-spacing: 0.18em;
+
+  opacity: 0.45;
+}
+
+.game-over-modal h2 {
+  margin:
+    7px 0 8px;
+
+  font-size: 34px;
+}
+
+.game-over-modal > p {
+  margin:
+    0 0 22px;
+
+  font-size: 13px;
+
+  opacity: 0.8;
+}
+
+.game-over-score-board {
+  display: grid;
+
+  grid-template-columns:
+    1fr 1fr;
+
+  gap: 10px;
+
+  margin-bottom: 20px;
+}
+
+.game-over-score-board > div {
+  padding:
+    15px 10px;
+
+  border-radius: 10px;
+
+  background:
+    rgb(255 255 255 / 7%);
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 4px;
+}
+
+.game-over-score-board span {
+  font-size: 11px;
+
+  opacity: 0.6;
+}
+
+.game-over-score-board strong {
+  font-size: 26px;
+}
+
+.game-over-score-board small {
+  font-size: 10px;
+
+  opacity: 0.55;
+}
+
+.restart-game-button {
+  width: 100%;
+  height: 45px;
+
+  border: none;
+  border-radius: 9px;
+
+  background: white;
+  color: #1f6b45;
+
+  font-size: 14px;
+  font-weight: 800;
+
+  cursor: pointer;
+}
+
+.restart-game-button:hover {
+  background:
+    #eeeeee;
+}
+/* =========================================
+   나가리
+========================================= */
+
+.game-over-modal--draw h2 {
+  margin-bottom: 8px;
+}
+
+.nagari-message {
+  margin:
+    -5px 0 18px;
+
+  padding: 8px 10px;
+
+  border-radius: 8px;
+
+  background:
+    rgb(255 255 255 / 8%);
+
+  font-size: 12px;
+  font-weight: 700;
+
+  opacity: 0.8;
+}
+/* =========================================
+   특수 규칙 연출
+========================================= */
+
+.special-effect {
+  position: fixed;
+
+  left: 50%;
+  top: 42%;
+
+  transform:
+    translate(-50%, -50%);
+
+  z-index: 450;
+
+  pointer-events: none;
+
+  padding:
+    10px 22px;
+
+  border-radius: 999px;
+
+  background:
+    rgb(0 0 0 / 72%);
+
+  color: white;
+
+  font-size:
+    clamp(24px, 4vw, 44px);
+
+  font-weight: 900;
+
+  letter-spacing:
+    -0.04em;
+
+  white-space: nowrap;
+
+  box-shadow:
+    0 10px 30px
+    rgb(0 0 0 / 28%);
+
+  animation:
+    special-effect-pop
+    650ms
+    ease
+    forwards;
+}
+
+@keyframes special-effect-pop {
+  0% {
+    opacity: 0;
+
+    transform:
+      translate(-50%, -50%)
+      scale(0.65);
+  }
+
+  20% {
+    opacity: 1;
+
+    transform:
+      translate(-50%, -50%)
+      scale(1.15);
+  }
+
+  45% {
+    transform:
+      translate(-50%, -50%)
+      scale(1);
+  }
+
+  80% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+
+    transform:
+      translate(-50%, -55%)
+      scale(0.96);
+  }
+}
+
+/* =========================================
+   바닥 뻑 표시
+========================================= */
+
+.ppeok-count {
+  display: inline-block;
+
+  margin-left: 8px;
+
+  padding:
+    2px 6px;
+
+  border-radius: 999px;
+
+  background:
+    rgb(0 0 0 / 28%);
+
+  font-size: 10px;
+
+  vertical-align: middle;
+}
+/* =========================================
+   폭탄 / 흔들기 선택창
+========================================= */
+
+.special-action-overlay {
+  position: fixed;
+  inset: 0;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  background: rgb(0 0 0 / 48%);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+
+  z-index: 520;
+}
+
+.special-action-modal {
+  width: min(390px, calc(100vw - 40px));
+  padding: 26px;
+
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: 18px;
+
+  background: rgb(20 32 26 / 97%);
+  color: white;
+
+  text-align: center;
+
+  box-shadow: 0 20px 60px rgb(0 0 0 / 35%);
+}
+
+.special-action-label {
+  display: block;
+  margin-bottom: 5px;
+
+  font-size: 11px;
+  opacity: 0.55;
+}
+
+.special-action-modal h2 {
+  margin: 0 0 10px;
+  font-size: 28px;
+}
+
+.special-action-modal p {
+  margin: 0 0 20px;
+
+  font-size: 13px;
+  line-height: 1.6;
+  opacity: 0.78;
+}
+
+.special-action-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+
+.special-action-buttons button {
+  min-height: 48px;
+
+  border: none;
+  border-radius: 10px;
+
+  font-size: 13px;
+  font-weight: 800;
+
+  cursor: pointer;
+}
+
+.special-action-confirm {
+  background: #df394c;
+  color: white;
+}
+
+.special-action-normal {
+  background: rgb(255 255 255 / 12%);
+  color: white;
+}
+
+.special-action-buttons button:hover {
+  transform: translateY(-1px);
+}
+
+/* =========================================
+   폭탄 후 생성되는 폭탄 패
+========================================= */
+
+.bomb-pass-button {
+  margin-bottom: 4px;
+  padding: 7px 12px;
+
+  border: 1px solid rgb(255 255 255 / 25%);
+  border-radius: 999px;
+
+  background: rgb(0 0 0 / 25%);
+  color: white;
+
+  font-size: 11px;
+  font-weight: 800;
+
+  cursor: pointer;
+
+  transition:
+    transform 0.15s ease,
+    background-color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.bomb-pass-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  background: rgb(0 0 0 / 38%);
+}
+
+.bomb-pass-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+/* =========================================
+   흔들기 공개 기록
+========================================= */
+
+.shake-records {
+  margin-top: 8px;
+  padding-top: 7px;
+
+  border-top: 1px solid rgb(255 255 255 / 12%);
+}
+
+.shake-records-label {
+  display: block;
+  margin-bottom: 5px;
+
+  font-size: 9px;
+  font-weight: 700;
+  opacity: 0.58;
+}
+
+.shake-record-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.shake-record-chip {
+  padding: 3px 6px;
+
+  border-radius: 999px;
+
+  background: rgb(255 255 255 / 10%);
+
+  font-size: 9px;
+  font-weight: 800;
+}
+
+/* =========================================
+   손에서 낸 패를 매칭 바닥패 위에 겹쳐 표시
+========================================= */
+
+.floor-card-slot {
+  position: relative;
+
+  width: clamp(48px, 4.3vw, 68px);
+  height: clamp(70px, 11vh, 96px);
+
+  overflow: visible;
+}
+
+.floor-card-slot > .card,
+.floor-card-slot > .card-back {
+  width: 100%;
+  height: 100%;
+}
+
+.played-card-overlay {
+  position: absolute;
+
+  left: clamp(8px, 0.8vw, 13px);
+  top: clamp(8px, 1vh, 13px);
+
+  z-index: 12;
+
+  width: 100%;
+  height: 100%;
+
+  pointer-events: none;
+
+  filter: drop-shadow(0 5px 5px rgb(0 0 0 / 28%));
+
+  animation: played-card-stack-in 180ms ease-out both;
+}
+
+.played-card-overlay > .card,
+.played-card-overlay > .card-back {
+  width: 100%;
+  height: 100%;
+}
+
+.played-card-overlay--player {
+  transform: rotate(2deg);
+}
+
+.played-card-overlay--opponent {
+  transform: rotate(-2deg);
+}
+
+@keyframes played-card-stack-in {
+  from {
+    opacity: 0;
+    translate: 0 -8px;
+    scale: 0.96;
+  }
+
+  to {
+    opacity: 1;
+    translate: 0 0;
+    scale: 1;
+  }
+}
+
+/* =========================================
+   확정된 먹은 패 → 획득 패널 이동
+========================================= */
+
+.capture-flight-layer {
+  position: fixed;
+  inset: 0;
+
+  z-index: 430;
+
+  pointer-events: none;
+}
+
+.capture-flight {
+  position: absolute;
+
+  left: 50%;
+  top: 49%;
+
+  width: clamp(48px, 4.3vw, 68px);
+  height: clamp(70px, 11vh, 96px);
+
+  transform: translate(-50%, -50%);
+
+  will-change: left, top, transform, opacity;
+}
+
+.capture-flight--player {
+  animation: capture-to-player 520ms cubic-bezier(0.22, 0.8, 0.25, 1) forwards;
+}
+
+.capture-flight--opponent {
+  animation: capture-to-opponent 520ms cubic-bezier(0.22, 0.8, 0.25, 1) forwards;
+}
+
+.capture-flight-card {
+  position: absolute;
+
+  width: 100%;
+  height: 100%;
+
+  filter: drop-shadow(0 7px 6px rgb(0 0 0 / 30%));
+}
+
+.capture-flight-card > .card,
+.capture-flight-card > .card-back {
+  width: 100%;
+  height: 100%;
+}
+
+@keyframes capture-to-player {
+  0% {
+    left: 50%;
+    top: 49%;
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+
+  65% {
+    transform: translate(-50%, -50%) scale(0.82);
+    opacity: 1;
+  }
+
+  100% {
+    left: 88%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(0.48);
+    opacity: 0.2;
+  }
+}
+
+@keyframes capture-to-opponent {
+  0% {
+    left: 50%;
+    top: 49%;
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+
+  65% {
+    transform: translate(-50%, -50%) scale(0.82);
+    opacity: 1;
+  }
+
+  100% {
+    left: 12%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(0.48);
+    opacity: 0.2;
+  }
+}
+
+@media (max-width: 1100px) {
+  @keyframes capture-to-player {
+    0% {
+      left: 50%;
+      top: 49%;
+      transform: translate(-50%, -50%) scale(1);
+      opacity: 1;
+    }
+
+    100% {
+      left: 91%;
+      top: 50%;
+      transform: translate(-50%, -50%) scale(0.42);
+      opacity: 0.15;
+    }
+  }
+
+  @keyframes capture-to-opponent {
+    0% {
+      left: 50%;
+      top: 49%;
+      transform: translate(-50%, -50%) scale(1);
+      opacity: 1;
+    }
+
+    100% {
+      left: 9%;
+      top: 50%;
+      transform: translate(-50%, -50%) scale(0.42);
+      opacity: 0.15;
+    }
+  }
+}
+/* =========================================
+   게임 속도 연동
+
+   App.tsx의 GAME_SPEED 값을 CSS 애니메이션에도
+   자동으로 적용합니다.
+
+   이 코드를 App.css 맨 아래에 한 번만 추가하면,
+   이후 속도 변경은 App.tsx의 GAME_SPEED만 수정하면 됩니다.
+========================================= */
+
+/* 내가 손에서 카드를 내는 이동 */
+.flying-card--player-play {
+  animation-duration: var(--player-play-duration) !important;
+}
+
+/* 상대가 손에서 카드를 내는 이동 */
+.flying-card--opponent-play {
+  animation-duration: var(--opponent-play-duration) !important;
+}
+
+/* 나 / 상대가 더미에서 카드를 뽑는 이동 */
+.flying-card--player-draw,
+.flying-card--opponent-draw {
+  animation-duration: var(--draw-flight-duration) !important;
+}
+
+/* 더미 카드 뒤집기 */
+.flip-card-inner {
+  transition-duration: var(--flip-duration) !important;
+}
+
+/* 손에서 낸 카드를 바닥패 위에 겹치는 모션 */
+.played-card-overlay {
+  animation-duration: var(--stack-in-duration) !important;
+}
+
+/* 확정된 패가 먹은 패 패널로 날아가는 모션 */
+.capture-flight--player,
+.capture-flight--opponent {
+  animation-duration: var(--capture-flight-duration) !important;
+}
+
+/* 뻑 / 쪽 / 따닥 / 폭탄 등의 큰 효과 */
+.special-effect {
+  animation-duration: var(--special-effect-duration) !important;
+}
+/* =========================================
+   뻑 카드 묶음 UI
+
+   - 평소: 같은 월 3장을 살짝 겹쳐서 표시
+   - 마우스 올리기: 카드 목록 팝업 표시
+   - 클릭: 팝업을 고정해서 표시
+========================================= */
+
+.ppeok-stack-slot {
+  position: relative;
+
+  width: calc(clamp(48px, 4.3vw, 68px) + 18px);
+  height: calc(clamp(70px, 11vh, 96px) + 26px);
+
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+
+  outline: none;
+  cursor: pointer;
+
+  z-index: 8;
+}
+
+.ppeok-stack-slot:focus-visible {
+  border-radius: 10px;
+  outline: 3px solid rgb(255 255 255 / 70%);
+  outline-offset: 4px;
+}
+
+/* =========================
+   겹쳐진 세 장
+========================= */
+
+.ppeok-stack-cards {
+  position: relative;
+
+  width: calc(clamp(48px, 4.3vw, 68px) + 16px);
+  height: calc(clamp(70px, 11vh, 96px) + 16px);
+}
+
+.ppeok-stack-card {
+  position: absolute;
+
+  left: calc(var(--ppeok-index) * 8px);
+  top: calc(var(--ppeok-index) * 7px);
+
+  width: clamp(48px, 4.3vw, 68px);
+  height: clamp(70px, 11vh, 96px);
+
+  pointer-events: none;
+
+  transform: rotate(calc((var(--ppeok-index) - 1) * 1.5deg));
+
+  filter: drop-shadow(0 4px 4px rgb(0 0 0 / 24%));
+
+  transition:
+    left 180ms ease,
+    top 180ms ease,
+    transform 180ms ease;
+}
+
+.ppeok-stack-card > .card,
+.ppeok-stack-card > .card-back {
+  width: 100%;
+  height: 100%;
+}
+
+/* 마우스를 올리면 세 장이 조금 더 벌어져
+   실제로 3장이 묶여 있다는 것을 보여줍니다. */
+@media (hover: hover) and (pointer: fine) {
+  .ppeok-stack-slot:hover .ppeok-stack-card:nth-child(1) {
+    left: -4px;
+    top: 2px;
+    transform: rotate(-4deg);
+  }
+
+  .ppeok-stack-slot:hover .ppeok-stack-card:nth-child(2) {
+    left: 8px;
+    top: 7px;
+    transform: rotate(0deg);
+  }
+
+  .ppeok-stack-slot:hover .ppeok-stack-card:nth-child(3) {
+    left: 20px;
+    top: 12px;
+    transform: rotate(4deg);
+  }
+}
+
+.ppeok-stack-slot.is-open .ppeok-stack-card:nth-child(1) {
+  left: -4px;
+  top: 2px;
+  transform: rotate(-4deg);
+}
+
+.ppeok-stack-slot.is-open .ppeok-stack-card:nth-child(2) {
+  left: 8px;
+  top: 7px;
+  transform: rotate(0deg);
+}
+
+.ppeok-stack-slot.is-open .ppeok-stack-card:nth-child(3) {
+  left: 20px;
+  top: 12px;
+  transform: rotate(4deg);
+}
+
+/* =========================
+   뻑 라벨
+========================= */
+
+.ppeok-stack-label {
+  position: absolute;
+  left: 50%;
+  bottom: -2px;
+
+  transform: translateX(-50%);
+
+  display: flex;
+  align-items: center;
+  gap: 4px;
+
+  padding: 3px 6px;
+
+  border-radius: 999px;
+
+  background: rgb(0 0 0 / 58%);
+  color: white;
+
+  white-space: nowrap;
+
+  pointer-events: none;
+}
+
+.ppeok-stack-label strong {
+  font-size: 9px;
+}
+
+.ppeok-stack-label span {
+  font-size: 8px;
+  opacity: 0.72;
+}
+
+/* =========================
+   상세 카드 팝업
+========================= */
+
+.ppeok-stack-detail {
+  position: absolute;
+
+  left: 50%;
+  bottom: calc(100% + 8px);
+
+  transform: translateX(-50%) translateY(5px) scale(0.97);
+
+  min-width: 236px;
+
+  padding: 10px;
+
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 10px;
+
+  background: rgb(15 45 32 / 97%);
+  color: white;
+
+  box-shadow: 0 12px 30px rgb(0 0 0 / 30%);
+
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease,
+    visibility 140ms ease;
+
+  z-index: 320;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ppeok-stack-slot:hover .ppeok-stack-detail {
+    opacity: 1;
+    visibility: visible;
+
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+.ppeok-stack-slot.is-open .ppeok-stack-detail {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+
+  transform: translateX(-50%) translateY(0) scale(1);
+}
+
+.ppeok-stack-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  gap: 12px;
+
+  margin-bottom: 8px;
+}
+
+.ppeok-stack-detail-header strong {
+  font-size: 12px;
+}
+
+.ppeok-stack-detail-header span {
+  font-size: 9px;
+  opacity: 0.6;
+}
+
+.ppeok-stack-detail-cards {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  gap: 5px;
+}
+
+.ppeok-detail-card {
+  width: 56px;
+  height: 78px;
+}
+
+.ppeok-detail-card > .card,
+.ppeok-detail-card > .card-back {
+  width: 100%;
+  height: 100%;
+}
+
+.ppeok-stack-detail-note {
+  margin-top: 8px;
+  padding-top: 7px;
+
+  border-top: 1px solid rgb(255 255 255 / 12%);
+
+  text-align: center;
+
+  font-size: 9px;
+  opacity: 0.65;
+}
+
+/* 뻑 상세 팝업이 바닥 카드 뒤에 숨지 않게 */
+.floor-cards {
+  overflow: visible;
+}
+
+.table,
+.table-content {
+  overflow: visible;
+}
+
+@media (max-width: 900px) {
+  .ppeok-stack-detail {
+    min-width: 205px;
+  }
+
+  .ppeok-detail-card {
+    width: 48px;
+    height: 70px;
+  }
+}
+/* =========================================
+   게임 모드 선택 화면
+========================================= */
+
+.mode-select-page {
+  width: 100%;
+  min-height: 100dvh;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  padding: 40px;
+
+  background:
+    #1f6b45;
+
+  color: white;
+}
+
+.mode-select-content {
+  width: min(
+    900px,
+    100%
+  );
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  gap: 36px;
+}
+
+.mode-select-title {
+  text-align: center;
+}
+
+.mode-select-eyebrow {
+  display: block;
+
+  margin-bottom: 10px;
+
+  font-size: 11px;
+  font-weight: 800;
+
+  letter-spacing: 0.18em;
+
+  opacity: 0.55;
+}
+
+.mode-select-title h1 {
+  margin: 0;
+
+  font-size:
+    clamp(
+      30px,
+      4vw,
+      48px
+    );
+
+  line-height: 1.2;
+}
+
+.mode-select-title p {
+  margin:
+    12px 0 0;
+
+  font-size: 14px;
+
+  opacity: 0.65;
+}
+
+/* =========================
+   선택 카드
+========================= */
+
+.mode-card-list {
+  width: 100%;
+
+  display: grid;
+
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+
+  gap: 18px;
+}
+
+.mode-card {
+  min-height: 290px;
+
+  padding: 26px;
+
+  border:
+    1px solid
+    rgb(255 255 255 / 18%);
+
+  border-radius: 18px;
+
+  background:
+    rgb(0 0 0 / 14%);
+
+  color: white;
+
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+
+  text-align: left;
+
+  cursor: pointer;
+
+  transition:
+    transform 0.2s ease,
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.mode-card:hover {
+  transform:
+    translateY(-6px);
+
+  background:
+    rgb(0 0 0 / 22%);
+
+  border-color:
+    rgb(255 255 255 / 38%);
+}
+
+.mode-card-player-count {
+  margin-bottom: 16px;
+
+  padding:
+    5px 8px;
+
+  border-radius: 999px;
+
+  background:
+    rgb(255 255 255 / 12%);
+
+  font-size: 9px;
+  font-weight: 800;
+
+  letter-spacing: 0.12em;
+}
+
+.mode-card > strong {
+  font-size: 28px;
+
+  margin-bottom: 8px;
+}
+
+.mode-card-description {
+  font-size: 13px;
+
+  opacity: 0.65;
+}
+
+.mode-card-info {
+  width: 100%;
+
+  margin-top: 24px;
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 7px;
+
+  font-size: 12px;
+
+  opacity: 0.75;
+}
+
+.mode-card-start {
+  margin-top: auto;
+
+  padding-top: 25px;
+
+  font-size: 13px;
+  font-weight: 800;
+}
+
+/* =========================================
+   게임 선택으로 돌아가기
+========================================= */
+
+.mode-back-button {
+  position: fixed;
+
+  top: 10px;
+  left: 145px;
+
+  z-index: 900;
+
+  padding:
+    9px 13px;
+
+  border:
+    1px solid
+    rgb(255 255 255 / 25%);
+
+  border-radius: 8px;
+
+  background:
+    rgb(0 0 0 / 30%);
+
+  color: white;
+
+  font-size: 12px;
+  font-weight: 700;
+
+  cursor: pointer;
+
+  backdrop-filter:
+    blur(5px);
+
+  -webkit-backdrop-filter:
+    blur(5px);
+}
+
+.mode-back-button:hover {
+  background:
+    rgb(0 0 0 / 45%);
+}
+
+/* =========================================
+   3인 고스톱 임시 화면
+========================================= */
+
+.gostop-coming-page {
+  width: 100%;
+  height: 100dvh;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  background:
+    #1f6b45;
+
+  color: white;
+}
+
+.mode-back-button--gostop {
+  left: 10px;
+}
+
+.gostop-coming-content {
+  text-align: center;
+}
+
+.gostop-coming-content
+> span {
+  font-size: 10px;
+  font-weight: 800;
+
+  letter-spacing: 0.18em;
+
+  opacity: 0.5;
+}
+
+.gostop-coming-content h1 {
+  margin:
+    7px 0 8px;
+
+  font-size: 44px;
+}
+
+.gostop-coming-content p {
+  margin:
+    0 0 25px;
+
+  font-size: 14px;
+
+  opacity: 0.65;
+}
+
+.gostop-coming-info {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+
+  gap: 7px;
+}
+
+.gostop-coming-info span {
+  padding:
+    7px 10px;
+
+  border-radius: 999px;
+
+  background:
+    rgb(0 0 0 / 18%);
+
+  font-size: 11px;
+}
+
+/* =========================================
+   작은 화면
+========================================= */
+
+@media (
+  max-width: 700px
+) {
+  .mode-select-page {
+    padding: 25px 18px;
+  }
+
+  .mode-card-list {
+    grid-template-columns:
+      1fr;
+  }
+
+  .mode-card {
+    min-height: 230px;
+  }
+}
+/* =========================================
+   3인 고스톱
+========================================= */
+
+.gostop-game {
+  width: 100%;
+  height: 100dvh;
+
+  display: grid;
+
+  grid-template-rows:
+    29% 43% 28%;
+
+  padding:
+    12px 22px;
+
+  background:
+    #1f6b45;
+
+  color: white;
+
+  overflow: hidden;
+
+  position: relative;
+}
+
+/* =========================
+   상단 상대 2명
+========================= */
+
+.gostop-opponents {
+  width: min(
+    1050px,
+    86%
+  );
+
+  margin: 0 auto;
+
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      2,
+      minmax(0, 1fr)
+    );
+
+  gap: 50px;
+
+  align-items: center;
+}
+
+.gostop-opponent {
+  min-width: 0;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  gap: 6px;
+
+  opacity: 0.72;
+
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.gostop-opponent.is-current {
+  opacity: 1;
+
+  transform:
+    translateY(3px);
+}
+
+.gostop-opponent h2,
+.gostop-player h2 {
+  margin: 0;
+
+  font-size:
+    clamp(
+      17px,
+      2.1vh,
+      24px
+    );
+}
+
+.gostop-opponent p,
+.gostop-player p {
+  margin: 0;
+
+  font-size:
+    clamp(
+      10px,
+      1.4vh,
+      13px
+    );
+}
+
+.gostop-opponent-hand {
+  width: 100%;
+
+  display: flex;
+  justify-content: center;
+
+  gap:
+    clamp(
+      3px,
+      0.5vw,
+      7px
+    );
+}
+
+.gostop-opponent-hand
+.card-back {
+  width:
+    clamp(
+      44px,
+      3.7vw,
+      60px
+    );
+
+  height:
+    clamp(
+      63px,
+      9.5vh,
+      84px
+    );
+}
+
+/* =========================
+   중앙
+========================= */
+
+.gostop-table {
+  min-height: 0;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  gap: 7px;
+}
+
+.gostop-table-title {
+  display: flex;
+  align-items: baseline;
+
+  gap: 10px;
+}
+
+.gostop-table-title h2 {
+  margin: 0;
+
+  font-size:
+    clamp(
+      20px,
+      2.6vh,
+      28px
+    );
+}
+
+.gostop-table-title span {
+  font-size: 11px;
+
+  opacity: 0.65;
+}
+
+.gostop-table-content {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  gap: 24px;
+}
+
+.gostop-floor-cards {
+  display: grid;
+
+  grid-template-columns:
+    repeat(4, auto);
+
+  gap: 6px;
+
+  justify-content: center;
+}
+
+.gostop-draw-pile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  gap: 4px;
+
+  font-size: 11px;
+}
+
+.gostop-captured-summary {
+  display: flex;
+
+  gap: 18px;
+
+  font-size: 10px;
+
+  opacity: 0.65;
+}
+
+/* =========================
+   내 패
+========================= */
+
+.gostop-player {
+  min-height: 0;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  gap: 7px;
+}
+
+.gostop-player-hand {
+  width: 100%;
+
+  display: flex;
+  justify-content: center;
+
+  gap:
+    clamp(
+      4px,
+      0.6vw,
+      8px
+    );
+}
+
+.gostop-player-hand
+.card {
+  cursor: pointer;
+
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.gostop-player-hand
+.card:hover {
+  transform:
+    translateY(-6px);
+
+  box-shadow:
+    0 6px 12px
+    rgb(0 0 0 / 20%);
+}
+
+.gostop-player:not(.is-current)
+.gostop-player-hand
+.card {
+  cursor: default;
+}
+
+.gostop-player:not(.is-current)
+.gostop-player-hand
+.card:hover {
+  transform: none;
+
+  box-shadow: none;
+}
+
+/* =========================
+   턴 메시지
+========================= */
+
+.gostop-turn-message {
+  position: fixed;
+
+  top: 12px;
+  right: 14px;
+
+  z-index: 150;
+
+  max-width: 360px;
+
+  padding:
+    10px 14px;
+
+  border-radius: 9px;
+
+  background:
+    rgb(0 0 0 / 45%);
+
+  font-size: 12px;
+
+  line-height: 1.4;
+}
+
+/* =========================
+   다시 시작
+========================= */
+
+.gostop-restart-button {
+  position: fixed;
+
+  left: 145px;
+  top: 10px;
+
+  z-index: 150;
+
+  padding:
+    9px 13px;
+
+  border: none;
+  border-radius: 8px;
+
+  background: white;
+
+  color:
+    #1f6b45;
+
+  font-size: 12px;
+  font-weight: 800;
+
+  cursor: pointer;
+}
+
+.gostop-restart-button:disabled {
+  opacity: 0.45;
+
+  cursor: default;
+}
+
+.mode-back-button--gostop-game {
+  left: 10px;
+}
+
+/* =========================
+   턴 종료 테스트 화면
+========================= */
+
+.gostop-round-over {
+  position: fixed;
+
+  inset: 0;
+
+  z-index: 500;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  background:
+    rgb(0 0 0 / 55%);
+
+  backdrop-filter:
+    blur(4px);
+
+  -webkit-backdrop-filter:
+    blur(4px);
+}
+
+.gostop-round-over
+> div {
+  width: min(
+    400px,
+    calc(
+      100vw - 40px
+    )
+  );
+
+  padding: 28px;
+
+  border-radius: 16px;
+
+  background:
+    rgb(
+      20 32 26 / 97%
+    );
+
+  text-align: center;
+}
+
+.gostop-round-over
+> div
+> span {
+  font-size: 9px;
+
+  letter-spacing:
+    0.18em;
+
+  opacity: 0.5;
+}
+
+.gostop-round-over h2 {
+  margin:
+    7px 0 6px;
+}
+
+.gostop-round-over p {
+  margin:
+    0 0 20px;
+
+  font-size: 12px;
+
+  opacity: 0.65;
+}
+
+.gostop-round-score {
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      3,
+      1fr
+    );
+
+  gap: 7px;
+
+  margin-bottom: 18px;
+}
+
+.gostop-round-score strong {
+  padding:
+    10px 5px;
+
+  border-radius: 7px;
+
+  background:
+    rgb(
+      255 255 255 / 7%
+    );
+
+  font-size: 11px;
+}
+
+.gostop-round-over button {
+  width: 100%;
+
+  padding:
+    11px;
+
+  border: none;
+
+  border-radius: 8px;
+
+  background: white;
+
+  color:
+    #1f6b45;
+
+  font-weight: 800;
+
+  cursor: pointer;
+}
+
+/* =========================
+   작은 화면
+========================= */
+
+@media (
+  max-width: 850px
+) {
+  .gostop-opponents {
+    width: 100%;
+
+    gap: 12px;
+  }
+
+  .gostop-opponent-hand
+  .card-back {
+    width: 36px;
+
+    height: 55px;
+  }
+
+  .gostop-captured-summary {
+    gap: 8px;
+  }
+}
+
+/* =========================================
+   3인 고스톱 - 2인 맞고 UI와 통일
+========================================= */
+
+.gostop3-game {
+  grid-template-rows: 27% 46% 27%;
+}
+
+/* =========================================
+   상단 상대 2명
+========================================= */
+
+.gostop3-opponents-area {
+  width: min(980px, 76%);
+  min-height: 0;
+  margin: 0 auto;
+
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(26px, 4vw, 70px);
+  align-items: center;
+}
+
+.gostop3-opponent-zone {
+  min-width: 0;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  gap: 6px;
+}
+
+.gostop3-opponent-zone h2 {
+  margin: 0 0 8px;
+
+  font-size: clamp(18px, 2.3vh, 26px);
+  line-height: 1.2;
+}
+
+.gostop3-opponent-zone p {
+  margin: 0;
+  font-size: clamp(11px, 1.5vh, 14px);
+}
+
+.gostop3-opponent-hand {
+  width: 100%;
+}
+
+/* =========================================
+   중앙 / 내 패
+========================================= */
+
+.gostop3-table {
+  position: relative;
+  z-index: 10;
+}
+
+.gostop3-player-area {
+  position: relative;
+  z-index: 10;
+}
+
+.gostop3-player-hand .card {
+  cursor: pointer;
+}
+
+/* =========================================
+   다시 시작 버튼
+   왼쪽의 '게임 선택' 버튼 옆
+========================================= */
+
+.gostop3-restart-button {
+  position: fixed;
+  top: 10px;
+  left: 145px;
+  z-index: 150;
+
+  padding: 9px 15px;
+
+  border: none;
+  border-radius: 8px;
+
+  background: white;
+  color: #1f6b45;
+
+  font-size: 14px;
+  font-weight: bold;
+
+  cursor: pointer;
+}
+
+.gostop3-restart-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* =========================================
+   3인용 먹은 패 패널
+
+   기존 2인 맞고 .captured-panel 디자인을
+   그대로 사용하고 위치만 바꿉니다.
+========================================= */
+
+.gostop3-captured-panel {
+  z-index: 25;
+  transform: none;
+}
+
+.gostop3-captured-panel--opponent1 {
+  top: 86px;
+  left: 18px;
+  right: auto;
+  bottom: auto;
+}
+
+.gostop3-captured-panel--opponent2 {
+  top: 86px;
+  right: 18px;
+  left: auto;
+  bottom: auto;
+}
+
+.gostop3-captured-panel--player {
+  top: auto;
+  right: 18px;
+  bottom: 16px;
+  left: auto;
+}
+
+/* =========================================
+   3인 종료 점수
+========================================= */
+
+.gostop3-final-scores {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.gostop3-final-scores > div {
+  padding: 12px 8px;
+  border-radius: 9px;
+  background: rgb(255 255 255 / 7%);
+
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gostop3-final-scores span {
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+.gostop3-final-scores strong {
+  font-size: 18px;
+}
+
+/* =========================================
+   2인 맞고와 동일한 애니메이션 속도 연동
+========================================= */
+
+.gostop3-game .flying-card--player-play {
+  animation-duration: var(--player-play-duration) !important;
+}
+
+.gostop3-game .flying-card--opponent-play {
+  animation-duration: var(--opponent-play-duration) !important;
+}
+
+.gostop3-game .flying-card--player-draw,
+.gostop3-game .flying-card--opponent-draw {
+  animation-duration: var(--draw-flight-duration) !important;
+}
+
+.gostop3-game .flip-card-inner {
+  transition-duration: var(--flip-duration) !important;
+}
+
+/* =========================================
+   폭이 좁을 때 패널 조금 축소
+========================================= */
+
+@media (max-width: 1250px) {
+  .gostop3-captured-panel {
+    width: 170px;
+    padding: 9px;
+  }
+
+  .gostop3-captured-panel--opponent1 {
+    left: 8px;
+  }
+
+  .gostop3-captured-panel--opponent2,
+  .gostop3-captured-panel--player {
+    right: 8px;
+  }
+
+  .gostop3-opponents-area {
+    width: 70%;
+    gap: 18px;
+  }
+}
+
+@media (max-width: 950px) {
+  .gostop3-captured-panel {
+    width: 150px;
+  }
+
+  .gostop3-opponents-area {
+    width: 66%;
+  }
+
+  .gostop3-opponent-zone p {
+    font-size: 10px;
+  }
+}
+/* =========================================
+   3인 고스톱 - 겹친 카드 / 뻑 / 획득 이동
+
+   기존 App.css 맨 아래에 추가합니다.
+   2인 맞고의 .floor-card-slot, .played-card-overlay,
+   .ppeok-stack-* 스타일은 그대로 재사용합니다.
+========================================= */
+
+/* =========================
+   누가 낸 카드인지 살짝 방향 차이
+========================= */
+
+.gostop3-played-card-overlay--0 {
+  transform: rotate(2deg);
+}
+
+.gostop3-played-card-overlay--1 {
+  transform: rotate(-2deg);
+}
+
+.gostop3-played-card-overlay--2 {
+  transform: rotate(3deg);
+}
+
+/* =========================
+   3인 획득 패 이동
+
+   0 = 나 (오른쪽 아래 패널)
+   1 = 상대 1 (왼쪽 위 패널)
+   2 = 상대 2 (오른쪽 위 패널)
+========================= */
+
+.gostop3-capture-flight {
+  animation-duration: var(--capture-flight-duration) !important;
+  animation-timing-function: cubic-bezier(0.22, 0.8, 0.25, 1);
+  animation-fill-mode: forwards;
+}
+
+.gostop3-capture-flight--0 {
+  animation-name: gostop3-capture-to-player;
+}
+
+.gostop3-capture-flight--1 {
+  animation-name: gostop3-capture-to-opponent1;
+}
+
+.gostop3-capture-flight--2 {
+  animation-name: gostop3-capture-to-opponent2;
+}
+
+@keyframes gostop3-capture-to-player {
+  0% {
+    left: 50%;
+    top: 49%;
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+
+  65% {
+    transform: translate(-50%, -50%) scale(0.82);
+    opacity: 1;
+  }
+
+  100% {
+    left: 88%;
+    top: 80%;
+    transform: translate(-50%, -50%) scale(0.45);
+    opacity: 0.15;
+  }
+}
+
+@keyframes gostop3-capture-to-opponent1 {
+  0% {
+    left: 50%;
+    top: 49%;
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+
+  65% {
+    transform: translate(-50%, -50%) scale(0.82);
+    opacity: 1;
+  }
+
+  100% {
+    left: 12%;
+    top: 24%;
+    transform: translate(-50%, -50%) scale(0.45);
+    opacity: 0.15;
+  }
+}
+
+@keyframes gostop3-capture-to-opponent2 {
+  0% {
+    left: 50%;
+    top: 49%;
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+
+  65% {
+    transform: translate(-50%, -50%) scale(0.82);
+    opacity: 1;
+  }
+
+  100% {
+    left: 88%;
+    top: 24%;
+    transform: translate(-50%, -50%) scale(0.45);
+    opacity: 0.15;
+  }
+}
+
+/* =========================
+   3인 뻑 상세 팝업 가독성
+========================= */
+
+.gostop3-game .ppeok-stack-detail-note {
+  line-height: 1.45;
+}
+
+.gostop3-game .ppeok-count {
+  margin-left: 7px;
+}
+
+/* 화면이 좁을 때 패널 목적지와 겹침을 조금 줄입니다. */
+@media (max-width: 1100px) {
+  @keyframes gostop3-capture-to-player {
+    0% {
+      left: 50%;
+      top: 49%;
+      transform: translate(-50%, -50%) scale(1);
+      opacity: 1;
+    }
+
+    100% {
+      left: 91%;
+      top: 80%;
+      transform: translate(-50%, -50%) scale(0.4);
+      opacity: 0.12;
+    }
+  }
+
+  @keyframes gostop3-capture-to-opponent1 {
+    0% {
+      left: 50%;
+      top: 49%;
+      transform: translate(-50%, -50%) scale(1);
+      opacity: 1;
+    }
+
+    100% {
+      left: 9%;
+      top: 24%;
+      transform: translate(-50%, -50%) scale(0.4);
+      opacity: 0.12;
+    }
+  }
+
+  @keyframes gostop3-capture-to-opponent2 {
+    0% {
+      left: 50%;
+      top: 49%;
+      transform: translate(-50%, -50%) scale(1);
+      opacity: 1;
+    }
+
+    100% {
+      left: 91%;
+      top: 24%;
+      transform: translate(-50%, -50%) scale(0.4);
+      opacity: 0.12;
+    }
+  }
+}
+
+/* =========================================================
+   먹은 패 "크게 보기" - 컴팩트 확대창
+   기존 captured-detail-* CSS가 남아 있어도 충돌하지 않도록
+   별도 클래스명을 사용합니다.
+========================================================= */
+
+.capture-zoom-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 790;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 18px;
+
+  /*
+   * 화면을 통째로 가리는 모달이 아니라
+   * 게임판 위에 살짝 뜨는 확대창 느낌
+   */
+  background: rgb(0 0 0 / 16%);
+}
+
+.capture-zoom-panel {
+  width: min(560px, calc(100vw - 44px));
+  max-height: min(62dvh, 560px);
+  overflow-y: auto;
+
+  padding: 16px 17px 13px;
+
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: 14px;
+
+  background: rgb(24 83 57 / 98%);
+  color: white;
+
+  box-shadow: 0 14px 38px rgb(0 0 0 / 30%);
+}
+
+.capture-zoom-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+
+  padding-bottom: 11px;
+  border-bottom: 1px solid rgb(255 255 255 / 12%);
+}
+
+.capture-zoom-header h2 {
+  margin: 0 0 7px;
+  font-size: 19px;
+  line-height: 1.2;
+}
+
+.capture-zoom-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.capture-zoom-summary span,
+.capture-zoom-shakes span {
+  padding: 4px 7px;
+
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 999px;
+
+  background: rgb(0 0 0 / 13%);
+
+  font-size: 9px;
+  line-height: 1;
+}
+
+.capture-zoom-close {
+  width: 30px;
+  height: 30px;
+
+  flex: 0 0 auto;
+
+  display: grid;
+  place-items: center;
+
+  padding: 0;
+
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 8px;
+
+  background: rgb(0 0 0 / 14%);
+  color: white;
+
+  font-size: 20px;
+  line-height: 1;
+
+  cursor: pointer;
+}
+
+.capture-zoom-close:hover {
+  background: rgb(0 0 0 / 25%);
+}
+
+.capture-zoom-shakes {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+
+  margin-top: 10px;
+  padding: 8px 9px;
+
+  border-radius: 9px;
+  background: rgb(0 0 0 / 10%);
+}
+
+.capture-zoom-shakes > strong {
+  font-size: 9px;
+  opacity: 0.62;
+}
+
+.capture-zoom-shakes > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.capture-zoom-groups {
+  display: grid;
+  gap: 7px;
+
+  margin-top: 11px;
+}
+
+.capture-zoom-row {
+  min-height: 58px;
+
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+
+  padding: 7px 8px;
+
+  border-radius: 9px;
+
+  background: rgb(0 0 0 / 9%);
+}
+
+.capture-zoom-row-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.capture-zoom-row-title strong {
+  font-size: 10px;
+}
+
+.capture-zoom-row-title span {
+  font-size: 8px;
+  opacity: 0.48;
+}
+
+.capture-zoom-cards {
+  min-width: 0;
+
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+
+  gap: 6px;
+}
+
+/*
+ * 원래 먹은 패 패널의 미니 카드보다만 크게 보이게 합니다.
+ * 게임판 카드만큼 지나치게 커지지 않습니다.
+ */
+.capture-zoom-card {
+  width: 46px;
+  height: 66px;
+
+  flex: 0 0 auto;
+}
+
+.capture-zoom-card > .card {
+  width: 46px !important;
+  height: 66px !important;
+
+  min-width: 46px !important;
+  min-height: 66px !important;
+
+  font-size: 9px !important;
+}
+
+.capture-zoom-card .card-month {
+  font-size: 10px !important;
+}
+
+.capture-zoom-empty {
+  font-size: 12px;
+  opacity: 0.32;
+}
+
+.capture-zoom-help {
+  margin: 9px 0 0;
+
+  font-size: 8px;
+  text-align: right;
+
+  opacity: 0.38;
+}
+
+@media (max-width: 700px) {
+  .capture-zoom-layer {
+    padding: 10px;
+  }
+
+  .capture-zoom-panel {
+    width: calc(100vw - 20px);
+    max-height: 70dvh;
+
+    padding: 13px;
+  }
+
+  .capture-zoom-row {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .capture-zoom-card {
+    width: 42px;
+    height: 61px;
+  }
+
+  .capture-zoom-card > .card {
+    width: 42px !important;
+    height: 61px !important;
+
+    min-width: 42px !important;
+    min-height: 61px !important;
+  }
+}
+/* =========================================================
+   3인 고스톱 최종 정산
+========================================================= */
+
+.gostop3-settlement-panel {
+  width: 100%;
+
+  margin-top: 13px;
+  padding: 12px;
+
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 11px;
+
+  background: rgb(255 255 255 / 5%);
+
+  text-align: left;
+}
+
+.gostop3-settlement-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.gostop3-settlement-heading > div:first-child,
+.gostop3-settlement-total {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gostop3-settlement-heading span,
+.gostop3-settlement-total span {
+  font-size: 9px;
+  opacity: 0.5;
+}
+
+.gostop3-settlement-heading strong {
+  font-size: 15px;
+}
+
+.gostop3-settlement-total {
+  align-items: flex-end;
+}
+
+.gostop3-settlement-total strong {
+  font-size: 18px;
+}
+
+.gostop3-settlement-formula {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+
+  margin-top: 9px;
+}
+
+.gostop3-settlement-formula span,
+.gostop3-settlement-tags span {
+  padding: 4px 7px;
+
+  border-radius: 999px;
+
+  background: rgb(0 0 0 / 16%);
+
+  font-size: 9px;
+}
+
+.gostop3-settlement-losers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+
+  margin-top: 10px;
+}
+
+.gostop3-settlement-loser {
+  min-width: 0;
+
+  padding: 9px;
+
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 9px;
+
+  background: rgb(0 0 0 / 9%);
+}
+
+.gostop3-settlement-loser.is-go-bak {
+  border-color: rgb(255 255 255 / 28%);
+  background: rgb(0 0 0 / 18%);
+}
+
+.gostop3-settlement-loser-name {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.gostop3-settlement-loser-name strong {
+  font-size: 11px;
+}
+
+.gostop3-settlement-loser-name span {
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.gostop3-settlement-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+
+  margin-top: 7px;
+}
+
+.gostop3-settlement-loser small {
+  display: block;
+
+  margin-top: 6px;
+
+  font-size: 8px;
+  line-height: 1.4;
+  opacity: 0.58;
+}
+
+.gostop3-settlement-note {
+  margin: 8px 0 0;
+
+  font-size: 9px;
+  line-height: 1.5;
+  opacity: 0.66;
+}
+
+@media (max-width: 700px) {
+  .gostop3-settlement-losers {
+    grid-template-columns: 1fr;
+  }
+}
