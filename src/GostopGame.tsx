@@ -18,6 +18,7 @@ import {
   type GostopSettlementResult,
 } from "./game/gostopSettlement";
 import {
+  applyGostopPansseul,
   canGostopShakeMonth,
   finalizeGostopPreparedPlay,
   findGostopBombAction,
@@ -188,6 +189,8 @@ function getSpecialEventName(event: GostopSpecialEvent) {
       return "쪽!";
     case "ttadak":
       return "따닥!";
+    case "pansseul":
+      return "판쓸!";
     case "ppeok-capture":
       return "뻑 먹기!";
     case "self-ppeok-capture":
@@ -729,6 +732,25 @@ function GostopGame() {
     return stolenPiValue;
   };
 
+  // 폭탄 중간 획득은 applyTurnResult를 사용하고, 완성된 턴만 여기로 옵니다.
+  const applyCompletedTurnResult = async (
+    owner: PlayerIndex,
+    result: GostopTurnCompleteResult
+  ) => {
+    const hand = owner === 0 ? playerCardsRef.current
+      : owner === 1 ? opponent1CardsRef.current : opponent2CardsRef.current;
+    const completed = applyGostopPansseul(
+      result,
+      hand.length + getBombPassCount(owner)
+    );
+    const stolenPiValue = await applyTurnResult(owner, completed);
+    await showSpecialEvents(
+      completed.specialEvents,
+      completed.stealPi,
+      stolenPiValue
+    );
+  };
+
   const startGame = () => {
     if (isProcessing) return;
 
@@ -1081,13 +1103,7 @@ function GostopGame() {
 
     if (currentPile.length === 0) {
       const result = finalizeGostopPreparedPlay(prepared);
-      const stolenPiValue = await applyTurnResult(0, result);
-
-      await showSpecialEvents(
-        result.specialEvents,
-        result.stealPi,
-        stolenPiValue
-      );
+      await applyCompletedTurnResult(0, result);
 
       await finishPlayerTurn();
       return;
@@ -1126,13 +1142,7 @@ function GostopGame() {
       return;
     }
 
-    const stolenPiValue = await applyTurnResult(0, drawResult);
-
-    await showSpecialEvents(
-      drawResult.specialEvents,
-      drawResult.stealPi,
-      stolenPiValue
-    );
+    await applyCompletedTurnResult(0, drawResult);
 
     await sleep(GAME_SPEED.resultPause);
     await finishPlayerTurn();
@@ -1175,12 +1185,7 @@ function GostopGame() {
       return;
     }
 
-    const stolenPiValue = await applyTurnResult(0, drawResult);
-    await showSpecialEvents(
-      drawResult.specialEvents,
-      drawResult.stealPi,
-      stolenPiValue
-    );
+    await applyCompletedTurnResult(0, drawResult);
     await sleep(GAME_SPEED.resultPause);
     await finishPlayerTurn();
   };
@@ -1407,13 +1412,7 @@ function GostopGame() {
 
     setPendingChoice(null);
 
-    const stolenPiValue = await applyTurnResult(0, result);
-
-    await showSpecialEvents(
-      result.specialEvents,
-      result.stealPi,
-      stolenPiValue
-    );
+    await applyCompletedTurnResult(0, result);
 
     await sleep(GAME_SPEED.resultPause);
     await finishPlayerTurn();
@@ -1478,12 +1477,7 @@ function GostopGame() {
         completeResult = drawResult;
       }
 
-      const stolenPiValue = await applyTurnResult(aiIndex, completeResult);
-      await showSpecialEvents(
-        completeResult.specialEvents,
-        completeResult.stealPi,
-        stolenPiValue
-      );
+      await applyCompletedTurnResult(aiIndex, completeResult);
       await finishAiTurn(aiIndex);
     };
 
@@ -1626,12 +1620,7 @@ function GostopGame() {
       }
     }
 
-    const stolenPiValue = await applyTurnResult(aiIndex, completeResult);
-    await showSpecialEvents(
-      completeResult.specialEvents,
-      completeResult.stealPi,
-      stolenPiValue
-    );
+    await applyCompletedTurnResult(aiIndex, completeResult);
 
     await sleep(GAME_SPEED.opponentAfterAction);
     await finishAiTurn(aiIndex);

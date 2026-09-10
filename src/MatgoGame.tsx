@@ -17,6 +17,7 @@ import {
   type SettlementResult,
 } from "./game/settlement";
 import {
+  applyPansseul,
   canShakeMonth,
   findBombAction,
   findShakeMonth,
@@ -220,6 +221,8 @@ function getSpecialEventName(event: SpecialEvent) {
       return "쪽!";
     case "ttadak":
       return "따닥!";
+    case "pansseul":
+      return "판쓸!";
     case "ppeok-capture":
       return "뻑 먹기!";
     case "self-ppeok-capture":
@@ -622,6 +625,19 @@ function MatgoGame() {
     [animateCapturedCards]
   );
 
+  // 폭탄 중간 획득은 applyTurnResult를 사용하고, 완성된 턴만 여기로 옵니다.
+  const applyCompletedTurnResult = useCallback(
+    async (side: Turn, result: TurnCompleteResult) => {
+      const remainingActions = side === "player"
+        ? myCardsRef.current.length + playerBombPassCountRef.current
+        : opponentCardsRef.current.length + opponentBombPassCountRef.current;
+      const completed = applyPansseul(result, remainingActions);
+      const stolen = await applyTurnResult(side, completed);
+      await showSpecialEvents(completed.specialEvents, completed.stealPi, stolen);
+    },
+    [applyTurnResult, showSpecialEvents]
+  );
+
   const handleStartGame = () => {
     if (isAnimating) return;
 
@@ -821,8 +837,7 @@ function MatgoGame() {
       return;
     }
 
-    const stolen = await applyTurnResult("player", result);
-    await showSpecialEvents(result.specialEvents, result.stealPi, stolen);
+    await applyCompletedTurnResult("player", result);
     await sleep(GAME_SPEED.resultPause);
     finishPlayerTurn();
   };
@@ -848,9 +863,7 @@ function MatgoGame() {
 
     if (currentPile.length === 0) {
       const result = finalizePreparedPlay(prepared);
-      const stolen = await applyTurnResult("player", result);
-
-      await showSpecialEvents(result.specialEvents, result.stealPi, stolen);
+      await applyCompletedTurnResult("player", result);
       finishPlayerTurn();
       return;
     }
@@ -881,12 +894,7 @@ function MatgoGame() {
       return;
     }
 
-    const stolen = await applyTurnResult("player", drawResult);
-    await showSpecialEvents(
-      drawResult.specialEvents,
-      drawResult.stealPi,
-      stolen
-    );
+    await applyCompletedTurnResult("player", drawResult);
     await sleep(GAME_SPEED.resultPause);
     finishPlayerTurn();
   };
@@ -1114,8 +1122,7 @@ function MatgoGame() {
     const result = resolveDrawChoice(pendingChoice.choice, selectedCard);
     setPendingChoice(null);
 
-    const stolen = await applyTurnResult("player", result);
-    await showSpecialEvents(result.specialEvents, result.stealPi, stolen);
+    await applyCompletedTurnResult("player", result);
     await sleep(GAME_SPEED.resultPause);
     finishPlayerTurn();
   };
@@ -1209,12 +1216,7 @@ function MatgoGame() {
             completeResult = drawResult;
           }
 
-          const stolen = await applyTurnResult("opponent", completeResult);
-          await showSpecialEvents(
-            completeResult.specialEvents,
-            completeResult.stealPi,
-            stolen
-          );
+          await applyCompletedTurnResult("opponent", completeResult);
           await finishOpponentAction();
         };
 
@@ -1412,12 +1414,7 @@ function MatgoGame() {
           }
         }
 
-        const stolen = await applyTurnResult("opponent", completeResult);
-        await showSpecialEvents(
-          completeResult.specialEvents,
-          completeResult.stealPi,
-          stolen
-        );
+        await applyCompletedTurnResult("opponent", completeResult);
         await finishOpponentAction();
       })();
     }, GAME_SPEED.opponentTurnDelay);
@@ -1431,6 +1428,7 @@ function MatgoGame() {
     gameOver,
     currentTurn,
     animateFlyingCard,
+    applyCompletedTurnResult,
     applyTurnResult,
     showSpecialEvents,
     showShakeReveal,

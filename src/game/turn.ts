@@ -11,6 +11,7 @@ export type SpecialEvent =
   | "ppeok"
   | "jjok"
   | "ttadak"
+  | "pansseul"
   | "ppeok-capture"
   | "self-ppeok-capture"
   | "bomb"
@@ -62,6 +63,34 @@ export type TurnCompleteResult = {
 };
 
 export type DrawResult = DrawChoiceState | TurnCompleteResult;
+
+/**
+ * 더미 뒤집기와 패 선택까지 끝난 결과에만 적용합니다.
+ * 폭탄의 손패 획득 중간 결과에는 호출하지 않습니다.
+ * 피망 판쓰리 규칙: 마지막 패에서는 판쓸 피 보상을 받지 않습니다.
+ * remainingActions는 처리 후 손패 수 + 남은 폭탄 패스 수입니다.
+ * 프로젝트 하우스 룰: 같은 턴의 다른 피 획득 이벤트와 보상을 합산합니다.
+ * 중복 합산은 공식 서비스에서 확인된 규칙이 아닙니다 (docs/pansseul.md).
+ * https://board-static.pmang.com/images/pmang/nabi/html/guide/gostop/gostop_2_2.html
+ */
+export function applyPansseul(
+  result: TurnCompleteResult,
+  remainingActions: number
+): TurnCompleteResult {
+  if (
+    result.floorCards.length > 0 ||
+    result.capturedCards.length === 0 ||
+    result.specialEvents.includes("pansseul")
+  ) {
+    return result;
+  }
+
+  return {
+    ...result,
+    specialEvents: [...result.specialEvents, "pansseul"],
+    stealPi: result.stealPi + (remainingActions > 0 ? 1 : 0),
+  };
+}
 
 export type StealPiResult = {
   remainingCards: HwatuCard[];
