@@ -4,6 +4,7 @@ import "./App.css";
 
 import MatgoGame from "./MatgoGame";
 import GostopGame from "./GostopGame";
+import OnlineMatgo from "./online/OnlineMatgo";
 
 import {
   GAME_RULES,
@@ -12,7 +13,7 @@ import {
 
 function App() {
   const [selectedMode, setSelectedMode] =
-    useState<GameMode | null>(null);
+    useState<GameMode | "online" | null>(null);
 
   /* =========================
      게임 선택 화면
@@ -20,7 +21,7 @@ function App() {
 
   if (!selectedMode) {
     return (
-      <main className="mode-select-page">
+      <main className="mode-select-page online-mode-select">
         <section className="mode-select-content">
           <div className="mode-select-title">
             <span className="mode-select-eyebrow">
@@ -36,6 +37,11 @@ function App() {
             </p>
           </div>
 
+          <button type="button" className="online-mode-entry"
+            onClick={() => setSelectedMode("online")}>
+            <strong>온라인 2인 맞고</strong>
+            <span className="mode-card-description">방 코드로 친구와 함께 플레이</span>
+          </button>
           <div className="mode-card-list">
             {/* 2인 맞고 */}
 
@@ -131,6 +137,10 @@ function App() {
   /* =========================
      2인 맞고
   ========================= */
+
+  if (selectedMode === "online") {
+    return <OnlineMatgo onBack={() => setSelectedMode(null)} />;
+  }
 
   if (selectedMode === "matgo") {
     return (
