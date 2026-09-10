@@ -10,7 +10,7 @@
     "start:server": "node dist/server/index.mjs",
     "typecheck": "tsc -b && tsc -p server/tsconfig.json",
     "build:server": "tsc -p server/tsconfig.json && esbuild server/index.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/server/index.mjs",
-    "test:online": "tsx --test server/tests/game.test.ts server/tests/socket.test.ts",
+    "test:online": "tsx --test server/tests/game.test.ts server/tests/socket.test.ts && tsx --tsconfig tsconfig.app.json --test tests/online-ui.test.ts",
     "lint": "eslint .",
     "preview": "vite preview"
   },

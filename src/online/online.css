@@ -17,14 +17,10 @@
 .online-message { color: #ffdf9c; }
 .online-waiting { margin: 60px auto; text-align: center; }
 .online-code { letter-spacing: .15em; color: #ffdf9c; font-size: 22px; }
-.online-board { max-width: 1100px; margin: auto; display: grid; gap: 20px; }
-.online-table { padding: 20px; background: #0002; border-radius: 16px; }
-.online-cards { display: flex; flex-wrap: wrap; gap: 9px; margin: 12px 0; }
-.online-page .card, .online-page .card-back { width: 58px; height: 84px; min-width: 58px; flex-shrink: 0; }
-.online-page .card { padding: 5px; }
-.online-page .card.selectable { outline: 2px solid #ffdf9c; }
-.online-page .card.selectable:hover { transform: translateY(-4px); }
-.online-prompt button { margin-right: 10px; }
-.online-events { font-size: 22px; font-weight: bold; color: #ffdf9c; }
-.online-captures { display: grid; gap: 12px; padding-bottom: 30px; }
-.online-page summary { cursor: pointer; padding: 8px 0; }
+.online-game-toolbar { position: absolute; top: 8px; left: 12px; z-index: 40; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; max-width: 42%; font-size: 11px; }
+.online-game-toolbar strong { letter-spacing: .08em; color: #ffdf9c; }
+.online-game-toolbar button { padding: 4px 7px; border: 1px solid #ffffff40; border-radius: 6px; background: #174c36; color: white; cursor: pointer; font: inherit; }
+.online-game-toolbar button:disabled { opacity: .45; cursor: default; }
+@media (max-width: 700px) {
+  .online-game-toolbar { top: 4px; left: 5px; gap: 3px; font-size: 10px; }
+}

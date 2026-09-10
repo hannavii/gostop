@@ -1,15 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
-import Card from "../components/Card";
+import OnlineGameBoard from "./OnlineGameBoard";
 import type { ClientEvents, GameAction, Reply, RoomView, ServerEvents } from "../../shared/online";
 import "./online.css";
 
 type OnlineSocket = Socket<ServerEvents, ClientEvents>;
-const eventNames: Record<string, string> = {
-  ppeok: "뻑!", jjok: "쪽!", ttadak: "따닥!", pansseul: "판쓸!",
-  "ppeok-capture": "뻑 먹기!", "self-ppeok-capture": "자뻑 회수!",
-};
-
 export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
   const socketRef = useRef<OnlineSocket | null>(null);
   const sending = useRef(false);
@@ -74,12 +69,11 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
   }
 
   const game = room?.game;
-  const mine = game && room ? game.players[room.you] : null;
-  const opponent = game && room ? game.players[room.you === 0 ? 1 : 0] : null;
-  const myTurn = Boolean(game && room && game.turn === room.you);
   const enabled = connected && !busy;
-  const resultLabel = !game?.result ? "" : game.result.winner === "draw"
-    ? "나가리 · 무승부" : game.result.winner === room?.you ? "승리!" : "상대방 승리";
+  if (room && game) return <OnlineGameBoard key={room.code} room={room} game={game}
+    enabled={enabled} message={message} act={act}
+    onSync={() => void request(s => s.timeout(5000).emitWithAck("room:sync"))}
+    onLeave={() => void request(s => s.timeout(5000).emitWithAck("room:leave"))} />;
 
   return (
     <main className="online-page">
@@ -116,65 +110,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
             <button type="button" disabled={!enabled}
               onClick={() => void request(s => s.timeout(5000).emitWithAck("room:leave"))}>방 나가기</button>
           </nav>
-          {!game ? <p className="online-waiting">상대방을 기다립니다. 두 명이 모이면 자동으로 시작합니다.</p> : (
-            <div className="online-board">
-              <section>
-                <h2>상대 · {opponent?.score}점 · {opponent?.goCount}고 · 손패 {opponent?.handCount}장</h2>
-                <div className="online-cards" aria-label="상대 손패">
-                  {Array.from({ length: opponent?.handCount ?? 0 }, (_, i) => <Card key={i} isBack />)}
-                </div>
-              </section>
-              <section className="online-table">
-                <h2>{game.phase === "finished" ? resultLabel : myTurn ? "내 차례" : "상대방 차례"}</h2>
-                <p>더미 {game.drawCount}장 · 바닥 {game.floor.length}장 · 상태 #{game.revision}</p>
-                {game.specialEvents.length > 0 && <p className="online-events" role="status">
-                  {game.specialEvents.map(event => eventNames[event] ?? event).join(" + ")}
-                </p>}
-                <div className="online-cards" aria-label="바닥패">
-                  {game.floor.map(card => <Card key={card.id} card={card} />)}
-                  {game.floor.length === 0 && <span>바닥에 패가 없습니다.</span>}
-                </div>
-                {game.ppeokStacks.length > 0 && <p>뻑 묶음: {game.ppeokStacks.map(stack => `${stack.month}월`).join(", ")}</p>}
-                {game.revealed.length > 0 && <details open>
-                  <summary>이번 턴에 공개된 패 (손패 → 더미패)</summary>
-                  <div className="online-cards">{game.revealed.map(card => <Card key={card.id} card={card} />)}</div>
-                </details>}
-                {game.phase === "choose" && <div className="online-prompt">
-                  <p>{myTurn ? "가져갈 바닥패를 선택하세요." : "상대방이 바닥패를 선택하고 있습니다."}</p>
-                  <div className="online-cards">{game.choice?.map(card => (
-                    <Card key={card.id} card={card} isSelectable={enabled}
-                      onClick={enabled && myTurn ? () => act("choose", card.id) : undefined} />
-                  ))}</div>
-                </div>}
-                {game.phase === "go-stop" && <div className="online-prompt">
-                  <p>{myTurn ? "GO 또는 STOP을 선택하세요." : "상대방이 GO/STOP을 선택하고 있습니다."}</p>
-                  {myTurn && <>
-                    <button type="button" disabled={!enabled} onClick={() => act("go")}>GO</button>
-                    <button type="button" disabled={!enabled} onClick={() => act("stop")}>STOP</button>
-                  </>}
-                </div>}
-                {game.result?.settlement && <p>기본 {game.result.settlement.baseScore}점 + 고 보너스 {game.result.settlement.goBonus}점
-                  · {game.result.settlement.totalMultiplier}배 · 최종 {game.result.settlement.finalScore}점</p>}
-                {game.phase === "finished" && <p>다시 플레이하려면 방을 나간 뒤 새 방을 만들어주세요.</p>}
-              </section>
-              <section>
-                <h2>나 · {mine?.score}점 · {mine?.goCount}고 · 손패 {game.hand.length}장</h2>
-                <div className="online-cards" aria-label="내 손패">
-                  {game.hand.map(card => <Card key={card.id} card={card}
-                    isSelectable={enabled && myTurn && game.phase === "play"}
-                    onClick={enabled && myTurn && game.phase === "play" ? () => act("play", card.id) : undefined} />)}
-                </div>
-              </section>
-              <section className="online-captures">
-                {[{ name: "내 먹은 패", player: mine }, { name: "상대 먹은 패", player: opponent }].map(({ name, player }) => (
-                  <details key={name}>
-                    <summary>{name} · {player?.captured.length ?? 0}장</summary>
-                    <div className="online-cards">{player?.captured.map(card => <Card key={card.id} card={card} />)}</div>
-                  </details>
-                ))}
-              </section>
-            </div>
-          )}
+          <p className="online-waiting">상대방을 기다립니다. 두 명이 모이면 자동으로 시작합니다.</p>
         </>
       )}
     </main>

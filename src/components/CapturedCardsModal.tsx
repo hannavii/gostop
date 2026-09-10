@@ -6,6 +6,7 @@ import type { HwatuCard } from "../types/game";
 
 type CapturedCardsModalProps = {
   title: string;
+  totalScore?: number;
   cards: HwatuCard[];
   goCount?: number;
   shakeMonths?: number[];
@@ -36,13 +37,15 @@ function getCardLabel(card: HwatuCard): string {
 
 function CapturedCardsModal({
   title,
+  totalScore,
   cards,
   goCount = 0,
   shakeMonths = [],
   bombCount = 0,
   onClose,
 }: CapturedCardsModalProps) {
-  const score = calculateScore(cards);
+  // Online supplies the authoritative score; offline keeps its existing calculation.
+  const displayedScore = totalScore ?? calculateScore(cards).total;
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -103,7 +106,7 @@ function CapturedCardsModal({
 
             <div className="capture-zoom-summary">
               <span>{cards.length}장</span>
-              <span>{score.total}점</span>
+              <span>{displayedScore}점</span>
 
               {goCount > 0 && <span>{goCount} GO</span>}
               {bombCount > 0 && <span>폭탄 {bombCount}</span>}
