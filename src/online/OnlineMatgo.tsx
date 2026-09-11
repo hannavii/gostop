@@ -24,7 +24,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
   const [message, setMessage] = useState("서버에 연결하는 중입니다.");
 
   useEffect(() => {
-    const socket: OnlineSocket = io({ autoConnect: false });
+    const socket: OnlineSocket = io(import.meta.env.VITE_SOCKET_URL?.trim() || undefined, { autoConnect: false });
     socketRef.current = socket;
     let disposed = false;
     let retry: ReturnType<typeof setTimeout> | undefined;

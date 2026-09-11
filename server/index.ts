@@ -1,9 +1,10 @@
 import { createOnlineServer } from "./app";
+import { readServerConfig } from "./config";
 
-const port = Number(process.env.PORT ?? 3001);
-const { http, io } = createOnlineServer();
-http.listen(port, "127.0.0.1", () => {
-  console.log(`Online matgo server: http://127.0.0.1:${port}`);
+const config = readServerConfig();
+const { http, io } = createOnlineServer({ connectionPolicy: config });
+http.listen(config.port, config.host, () => {
+  console.log(`Online server listening on ${config.host}:${config.port}`);
 });
 http.on("error", error => { console.error(error); process.exitCode = 1; });
 process.on("SIGINT", () => { void io.close(); });

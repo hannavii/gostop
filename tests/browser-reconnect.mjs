@@ -6,21 +6,35 @@ import { once } from 'node:events';
 import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { createServer } from 'vite';
+import { build, createServer, preview } from 'vite';
 import { createOnlineServer } from '../server/app.ts';
 
 const executable = process.env.BROWSER_EXECUTABLE ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 const artifactRoot = resolve('.tmp-online.local');
 await mkdir(artifactRoot, { recursive: true });
 const profile = await mkdtemp(resolve(artifactRoot, 'reconnect-browser-'));
-const server = createOnlineServer();
+const allowedOrigins = [];
+const server = createOnlineServer({ connectionPolicy: { allowedOrigins, allowMissingOrigin: false } });
 server.http.listen(0, '127.0.0.1');
 await once(server.http, 'listening');
-const vite = await createServer({ server: { host: '127.0.0.1', port: 0, proxy: {
-  '/socket.io': { target: `http://127.0.0.1:${server.http.address().port}`, ws: true },
-} }, logLevel: 'error' });
-await vite.listen();
+const production = process.argv.includes('--production');
+const socketUrl = `http://127.0.0.1:${server.http.address().port}`;
+let vite;
+if (production) {
+  const outDir = resolve(profile, 'client');
+  process.env.VITE_SOCKET_URL = socketUrl;
+  await build({ build: { outDir }, logLevel: 'error' });
+  // No config file and no proxy: the production bundle must reach the other origin itself.
+  const staticServer = await preview({ configFile: false, build: { outDir }, preview: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
+  vite = { httpServer: staticServer.httpServer, close: () => new Promise(resolve => staticServer.httpServer.close(resolve)) };
+} else {
+  vite = await createServer({ server: { host: '127.0.0.1', port: 0, proxy: {
+    '/socket.io': { target: socketUrl, ws: true },
+  } }, logLevel: 'error' });
+  await vite.listen();
+}
 const url = `http://127.0.0.1:${vite.httpServer.address().port}`;
+allowedOrigins.push(url);
 let browser, ws, rpc;
 async function until(work, label, timeout = 20000) {
   const deadline = Date.now() + timeout;

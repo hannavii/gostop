@@ -6,6 +6,7 @@ import { NICKNAME_MAX_LENGTH } from "../shared/online";
 import type { Ack, ClientEvents, ServerEvents, Seat } from "../shared/online";
 import { applyAction, createMatch, gameView, parseAction, type Match } from "./game";
 import { GAME_RULES, type GameMode } from "../src/game/rules";
+import { readServerConfig } from "./config";
 
 export const RECONNECT_GRACE_MS = 60_000;
 type Member = { nickname: string; ready: boolean; socketId: string | null; tokenHash: Buffer; deadline: number | null;
@@ -13,13 +14,29 @@ type Member = { nickname: string; ready: boolean; socketId: string | null; token
 type Room = { code: string; mode: GameMode; members: Member[]; host: Member | null; match: Match | null };
 const hashToken = (token: string) => createHash("sha256").update(token).digest();
 
-export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matchFactory = createMatch }: {
+export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matchFactory = createMatch,
+  connectionPolicy = readServerConfig() }: {
   reconnectGraceMs?: number; matchFactory?: typeof createMatch;
+  connectionPolicy?: Pick<ReturnType<typeof readServerConfig>, "allowedOrigins" | "allowMissingOrigin">;
 } = {}) {
   if (!Number.isSafeInteger(reconnectGraceMs) || reconnectGraceMs <= 0) throw new Error("Invalid reconnect grace period");
   const app = express();
   const http = createServer(app);
-  const io = new Server<ClientEvents, ServerEvents>(http, { maxHttpBufferSize: 16_384 });
+  const originAllowed = (origin: string | undefined) => origin === undefined
+    ? connectionPolicy.allowMissingOrigin : connectionPolicy.allowedOrigins.includes(origin);
+  const io = new Server<ClientEvents, ServerEvents>(http, {
+    maxHttpBufferSize: 16_384,
+    cors: { origin: (origin, callback) => callback(null, originAllowed(origin)), methods: ["GET", "POST"] },
+    // CORS alone does not restrict WebSocket handshakes.
+    allowRequest: (request, callback) => {
+      let origin = request.headers.origin;
+      // Same-origin polling GETs may omit Origin; validate the browser's Referer instead.
+      if (origin === undefined && request.headers["sec-fetch-site"] === "same-origin" && request.headers.referer) {
+        try { origin = new URL(request.headers.referer).origin; } catch { /* deny below */ }
+      }
+      callback(null, originAllowed(origin));
+    },
+  });
   const rooms = new Map<string, Room>();
   const membership = new Map<string, string>();
   app.get("/health", (_req, res) => { res.json({ ok: true }); });
