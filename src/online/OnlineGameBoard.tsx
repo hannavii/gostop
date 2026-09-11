@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import type { GameAction, GameView, RoomView, Seat } from "../../shared/online";
+import RoomCode from "./RoomCode";
 import Card from "../components/Card";
 import CapturedPanel from "../components/CapturedPanel";
 import CapturedCardsModal from "../components/CapturedCardsModal";
@@ -78,7 +79,7 @@ export default function OnlineGameBoard({ room, game, enabled, message, act, onS
   const three = game.mode === "gostop";
   const relativeSeat = (seat: Seat) => (seat - room.you + game.players.length) % game.players.length;
   const opponents = game.players.filter(p => p.seat !== room.you).sort((a, b) => relativeSeat(a.seat) - relativeSeat(b.seat));
-  const name = (seat: Seat) => seat === room.you ? "나" : three ? `상대 ${relativeSeat(seat)}` : "상대방";
+  const name = (seat: Seat) => room.connections[seat].nickname;
   const myTurn = game.turn === room.you;
   const finished = game.phase === "finished";
   const animating = Boolean(visual.card || visual.captured || visual.effect);
@@ -87,11 +88,12 @@ export default function OnlineGameBoard({ room, game, enabled, message, act, onS
   const result = game.result;
   const settlement = result?.settlement;
   const turnMessage = message || (finished ? "게임이 끝났습니다." : !myTurn
-    ? game.phase === "choose" ? "상대방이 바닥패를 선택하고 있습니다." : game.phase === "go-stop" ? "상대방이 GO / STOP을 선택하고 있습니다." : "상대방 차례입니다."
+    ? game.phase === "choose" ? `${name(game.turn)}님이 바닥패를 선택하고 있습니다.` : game.phase === "go-stop" ? `${name(game.turn)}님이 GO / STOP을 선택하고 있습니다.` : `${name(game.turn)}님 차례입니다.`
     : game.phase === "play" ? "낼 카드를 선택하세요." : "");
   return <main className={`game ${three ? "gostop3-game online-gostop-game" : "online-matgo-game"} ${animating ? "is-animating" : ""}`} style={GAME_SPEED_STYLE}>
     <nav className="online-game-toolbar" aria-label="방 정보">
-      <span>방 <strong>{room.code}</strong> · {room.occupancy}/{room.capacity}명 · {three ? "3인 고스톱" : "2인 맞고"}</span>
+      <RoomCode code={room.code} />
+      <span> {room.occupancy}/{room.capacity}명 · {three ? "3인 고스톱" : "2인 맞고"}</span>
       <button disabled={!enabled} onClick={onSync}>새로고침</button>
       <button disabled={!enabled} onClick={onLeave}>방 나가기</button>
     </nav>
@@ -111,7 +113,7 @@ export default function OnlineGameBoard({ room, game, enabled, message, act, onS
       cards={selected.captured} totalScore={selected.score} goCount={selected.goCount}
       shakeMonths={selected.shakeMonths} bombCount={selected.bombCount} onClose={() => setDetail(null)} />}
     {[...opponents, mine].map(player => <CapturedPanel key={player.seat}
-      title={player.seat === room.you ? "내 먹은 패" : `${three ? name(player.seat) : "상대"} 먹은 패`}
+      title={player.seat === room.you ? "내 먹은 패" : `${name(player.seat)} 먹은 패`}
       position={three ? player.seat === room.you ? "player" : relativeSeat(player.seat) === 1 ? "opponent1" : "opponent2" : undefined}
       side={player.seat === room.you ? "right" : "left"} cards={player.captured}
       score={{ total: player.score }} goCount={player.goCount} shakeCount={player.shakeMonths.length} shakeMonths={player.shakeMonths} bombCount={player.bombCount}
@@ -119,7 +121,8 @@ export default function OnlineGameBoard({ room, game, enabled, message, act, onS
     <section className={three ? "gostop3-opponents-area" : "opponent-area"}>
       {opponents.map(opponent => {
         const content = <>
-      <h2>{name(opponent.seat)}{game.turn === opponent.seat && !finished && " ◀"}</h2>
+      <h2>{opponent.seat === room.host && <span aria-label="방장">👑 </span>}{name(opponent.seat)}{game.turn === opponent.seat && !finished && " ◀"}</h2>
+      <small className="online-player-connection">{room.connections[opponent.seat].connected ? "접속 중" : "재접속 대기"}</small>
       <div className={`card-row${three ? " gostop3-opponent-hand" : ""}`} aria-label={three ? `${name(opponent.seat)} 손패` : "상대 손패"}>
         {Array.from({ length: opponent.handCount }, (_, i) => <Card key={i} isBack />)}
       </div>
@@ -138,7 +141,8 @@ export default function OnlineGameBoard({ room, game, enabled, message, act, onS
       turnMessage={turnMessage} isAnimating={!canAct} gameOver={finished}
       gameStarted drawCount={game.drawCount} handleFloorCardChoice={card => act("choose", card.id)} />
     <section className={`player-area${three ? " gostop3-player-area" : ""}`}>
-      <h2>내 패{myTurn && !finished && " ◀"}</h2>
+      <h2>{room.you === room.host && <span aria-label="방장">👑 </span>}{name(room.you)} (나){myTurn && !finished && " ◀"}</h2>
+      <small>{room.connections[room.you].connected ? "접속 중" : "재접속 대기"}</small>
       <div className={`card-row${three ? " gostop3-player-hand" : ""}`} aria-label="내 손패">{game.hand.map(card => <Card key={card.id} card={card}
         onClick={canAct && myTurn && game.phase === "play" && !specialPrompt ? () => {
           const option = game.specialOptions.find(option => option.cardId === card.id);
@@ -170,7 +174,7 @@ export default function OnlineGameBoard({ room, game, enabled, message, act, onS
       <h2>{result.winner === "draw" ? "나가리 · 무승부" : result.winner === room.you ? "승리!" : `${name(result.winner)} 승리`}</h2>
       {three ? <div className="gostop3-final-scores">{[mine, ...opponents].map(p =>
         <div key={p.seat}><span>{name(p.seat)} 점수</span><strong>{p.score}점</strong><small>{p.goCount} GO</small></div>)}</div>
-        : <div className="game-over-score-board"><span>내 점수 {mine.score}점</span><span>상대 점수 {opponents[0].score}점</span></div>}
+        : <div className="game-over-score-board"><span>내 점수 {mine.score}점</span><span>{name(opponents[0].seat)} 점수 {opponents[0].score}점</span></div>}
       {result.gostopSettlement && <GostopOnlineSettlement settlement={result.gostopSettlement} name={name} />}
       {settlement && <div className="settlement-board">
         <div className="settlement-row"><span>기본 점수</span><strong>{settlement.baseScore}점</strong></div>

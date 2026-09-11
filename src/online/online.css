@@ -28,3 +28,16 @@
 @media (max-width: 700px) {
   .online-game-toolbar { top: 4px; left: 5px; gap: 3px; font-size: 10px; }
 }
+.online-nickname { display: flex; align-items: center; gap: 12px; margin: 24px 0; }
+.online-room-code { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.online-code { user-select: text; cursor: text; }
+.online-room-code small { width: 100%; }
+.online-players { list-style: none; padding: 0; margin: 20px 0; }
+.online-players li { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 12px; border-bottom: 1px solid #ffffff25; overflow-wrap: anywhere; }
+.online-players small.online-connected, .online-players small.online-disconnected { display: block; margin-top: 6px; }
+.online-connected, .online-ready { color: #a2efb5; }
+.online-disconnected { color: #ffdf9c; }
+.online-empty-seat { color: #ffffff80; }
+.online-room-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.online-page .online-start { background: #ffdf9c; color: #174c36; font-weight: 700; }
+.online-player-connection { display: block; margin-bottom: 4px; }

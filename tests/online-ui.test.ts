@@ -21,13 +21,29 @@ function fixture(): GameView {
     revealed: [], specialEvents: [], ppeokStacks: [], result: null, specialOptions: [],
   };
 }
-function board(game: GameView, you: Seat = 0) {
+function board(game: GameView, you: Seat = 0, names?: string[]) {
   return renderToStaticMarkup(createElement(OnlineGameBoard, {
-    game, room: { code: "ABC123", mode: game.mode, capacity: game.players.length, you, occupancy: game.players.length,
-      connections: game.players.map(p => ({ seat: p.seat, connected: true, reconnectDeadline: null })), game }, enabled: true,
+    game, room: { code: "ABC123", mode: game.mode, capacity: game.players.length, host: 0, you, occupancy: game.players.length,
+      connections: game.players.map(p => ({ seat: p.seat, nickname: names?.[p.seat] ?? (p.seat === you ? "나" : game.mode === "gostop" ? `상대 ${(p.seat - you + 3) % 3}` : "상대방"), ready: true, connected: true, reconnectDeadline: null })), game }, enabled: true,
     message: "", act() {}, onSync() {}, onLeave() {},
   }));
 }
+
+test("online board displays server nicknames, host and connection labels with escaped user content", () => {
+  for (const mode of ["matgo", "gostop"] as const) {
+    const match = createMatch(mode);
+    const names = ["예랑", "<철수>", "영희"];
+    for (const you of match.players.map((_, i) => i as Seat)) {
+      const html = board(gameView(match, you), you, names);
+      assert.ok(html.includes("예랑"));
+      assert.ok(html.includes("&lt;철수&gt;"));
+      assert.ok(!html.includes("<철수>"));
+      assert.match(html, /aria-label="방장"/);
+      assert.equal((html.match(/접속 중/g) ?? []).length, match.players.length);
+      if (mode === "gostop") assert.ok(html.includes("영희"));
+    }
+  }
+});
 test("online uses shared table, captured panels, speed and authoritative scores for both seats", () => {
   for (const seat of [0, 1] as const) {
     const html = board(fixture(), seat);

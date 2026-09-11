@@ -40,16 +40,18 @@ test("real Socket.IO clients: rooms, privacy, validation, full round, isolation 
     });
   }
   const [a, b, outsider, d] = clients;
-  assert.equal((await b.timeout(2000).emitWithAck("room:join", "------")).ok, false);
-  assert.equal((await a.timeout(2000).emitWithAck("room:create")).ok, true);
+  assert.equal((await b.timeout(2000).emitWithAck("room:join", "------", "Guest")).ok, false);
+  assert.equal((await a.timeout(2000).emitWithAck("room:create", "Host")).ok, true);
   assert.equal(views[0]?.occupancy, 1);
   assert.equal(views[0]?.game, null);
   const code = views[0]!.code;
-  assert.equal((await a.timeout(2000).emitWithAck("room:create")).ok, false);
-  assert.equal((await b.timeout(2000).emitWithAck("room:join", code.toLowerCase())).ok, true);
+  assert.equal((await a.timeout(2000).emitWithAck("room:create", "Host")).ok, false);
+  assert.equal((await b.timeout(2000).emitWithAck("room:join", code.toLowerCase(), "Guest")).ok, true);
+  for (const client of [a, b]) assert.equal((await client.emitWithAck("room:ready", true)).ok, true);
+  assert.equal((await a.emitWithAck("room:start")).ok, true);
   await until(() => !!views[0]?.game && !!views[1]?.game);
-  assert.equal((await outsider.timeout(2000).emitWithAck("room:join", code)).ok, false);
-  assert.equal((await outsider.timeout(2000).emitWithAck("room:create")).ok, true);
+  assert.equal((await outsider.timeout(2000).emitWithAck("room:join", code, "Guest")).ok, false);
+  assert.equal((await outsider.timeout(2000).emitWithAck("room:create", "Host")).ok, true);
   const isolated = structuredClone(views[2]);
   const initial = views[0]!.game!;
   const move: GameAction = { roomCode: code, revision: initial.revision, type: "play", cardId: initial.hand[0].id };
@@ -97,11 +99,11 @@ test("real Socket.IO clients: rooms, privacy, validation, full round, isolation 
   assert.equal((await b.timeout(2000).emitWithAck("room:leave")).ok, true);
   await until(() => Boolean(closed[0]));
   assert.equal((await a.timeout(2000).emitWithAck("game:action", move)).ok, false);
-  assert.equal((await d.timeout(2000).emitWithAck("room:join", code)).ok, false);
-  assert.equal((await a.timeout(2000).emitWithAck("room:create")).ok, true);
+  assert.equal((await d.timeout(2000).emitWithAck("room:join", code, "Guest")).ok, false);
+  assert.equal((await a.timeout(2000).emitWithAck("room:create", "Host")).ok, true);
   const waitingCode = views[0]!.code;
   assert.equal((await a.timeout(2000).emitWithAck("room:leave")).ok, true);
-  assert.equal((await d.timeout(2000).emitWithAck("room:join", waitingCode)).ok, false);
+  assert.equal((await d.timeout(2000).emitWithAck("room:join", waitingCode, "Guest")).ok, false);
 });
 
 for (const mode of ["matgo", "gostop"] as const) test(`${mode} browser connection path: Vite proxy accepts default polling and WebSocket upgrade`, { timeout: 15000 }, async t => {
@@ -134,8 +136,10 @@ for (const mode of ["matgo", "gostop"] as const) test(`${mode} browser connectio
       client.once("connect_error", reject);
     });
   }
-  assert.equal((await clients[0].timeout(2000).emitWithAck("room:create-mode", mode)).ok, true);
-  for (let i = 1; i < count; i++) assert.equal((await clients[i].timeout(2000).emitWithAck("room:join", views[0]!.code)).ok, true);
+  assert.equal((await clients[0].timeout(2000).emitWithAck("room:create-mode", mode, "Host")).ok, true);
+  for (let i = 1; i < count; i++) assert.equal((await clients[i].timeout(2000).emitWithAck("room:join", views[0]!.code, "Guest")).ok, true);
+  for (const client of clients) assert.equal((await client.emitWithAck("room:ready", true)).ok, true);
+  assert.equal((await clients[0].emitWithAck("room:start")).ok, true);
   await until(() => views.every(v => !!v?.game));
   const view = views[0]!;
   assert.equal((await clients[0].timeout(2000).emitWithAck("game:action", {
@@ -165,26 +169,28 @@ test("three real clients: waiting, capacity, privacy, invalid actions, full roun
     await new Promise<void>((resolve, reject) => { client.once("connect", resolve); client.once("connect_error", reject); });
   }
   const [a, b, c, fourth] = clients;
-  assert.equal((await a.timeout(2000).emitWithAck("room:create-mode", "forged" as "gostop")).ok, false);
-  assert.equal((await a.timeout(2000).emitWithAck("room:create-mode", "gostop")).ok, true);
+  assert.equal((await a.timeout(2000).emitWithAck("room:create-mode", "forged" as "gostop", "Host")).ok, false);
+  assert.equal((await a.timeout(2000).emitWithAck("room:create-mode", "gostop", "Host")).ok, true);
   const code = views[0]!.code;
   assert.equal(views[0]!.mode, "gostop");
   assert.equal(views[0]!.capacity, 3);
   assert.equal(views[0]!.game, null);
-  assert.equal((await b.timeout(2000).emitWithAck("room:join", code)).ok, true);
+  assert.equal((await b.timeout(2000).emitWithAck("room:join", code, "Guest")).ok, true);
   await until(() => views[0]?.occupancy === 2 && views[1]?.occupancy === 2);
   assert.equal(views[0]!.game, null);
   assert.equal(views[1]!.game, null);
   assert.equal((await a.timeout(2000).emitWithAck("game:action", { roomCode: code, revision: 0, type: "play", cardId: "1-1" })).ok, false);
-  assert.equal((await c.timeout(2000).emitWithAck("room:join", code)).ok, true);
+  assert.equal((await c.timeout(2000).emitWithAck("room:join", code, "Guest")).ok, true);
+  for (const client of [a, b, c]) assert.equal((await client.emitWithAck("room:ready", true)).ok, true);
+  assert.equal((await a.emitWithAck("room:start")).ok, true);
   await until(() => views.slice(0, 3).every(v => !!v?.game));
-  assert.equal((await fourth.timeout(2000).emitWithAck("room:join", code)).ok, false);
+  assert.equal((await fourth.timeout(2000).emitWithAck("room:join", code, "Guest")).ok, false);
   assert.deepEqual(views.slice(0, 3).map(v => v!.you), [0, 1, 2]);
   assert.deepEqual(views.slice(0, 3).map(v => v!.game!.hand.length), [7, 7, 7]);
   assert.equal(views[0]!.game!.floor.length, 6);
   assert.equal(views[0]!.game!.drawCount, 21);
   // A separate two-player lobby must remain isolated from this three-player game.
-  assert.equal((await fourth.timeout(2000).emitWithAck("room:create")).ok, true);
+  assert.equal((await fourth.timeout(2000).emitWithAck("room:create", "Host")).ok, true);
   const isolated = structuredClone(views[3]);
   function checkViews() {
     const games = views.slice(0, 3).map(v => v!.game!);
@@ -235,6 +241,6 @@ test("three real clients: waiting, capacity, privacy, invalid actions, full roun
   assert.equal((await c.timeout(2000).emitWithAck("room:leave")).ok, true);
   await until(() => Boolean(closed[0] && closed[1]));
   assert.equal((await a.timeout(2000).emitWithAck("game:action", move)).ok, false);
-  assert.equal((await b.timeout(2000).emitWithAck("room:join", code)).ok, false);
+  assert.equal((await b.timeout(2000).emitWithAck("room:join", code, "Guest")).ok, false);
   assert.deepEqual(views[3], isolated);
 });

@@ -4,6 +4,7 @@ import type { SettlementResult } from "../src/game/settlement";
 import type { GostopSettlementResult } from "../src/game/gostopSettlement";
 import type { GameMode } from "../src/game/rules";
 
+export const NICKNAME_MAX_LENGTH = 12;
 export type Seat = 0 | 1 | 2;
 export type GameAction = {
   roomCode: string;
@@ -35,13 +36,16 @@ export type GameView = {
     gostopSettlement?: GostopSettlementResult } | null;
 };
 export type RoomView = { code: string; mode: GameMode; capacity: number; you: Seat; occupancy: number;
-  connections: { seat: Seat; connected: boolean; reconnectDeadline: number | null }[];
+  host: Seat;
+  connections: { seat: Seat; nickname: string; ready: boolean; connected: boolean; reconnectDeadline: number | null }[];
   game: GameView | null };
 
 export interface ClientEvents {
-  "room:create": (ack: Ack) => void;
-  "room:create-mode": (mode: GameMode, ack: Ack) => void;
-  "room:join": (code: string, ack: Ack) => void;
+  "room:create": (nickname: string, ack: Ack) => void;
+  "room:create-mode": (mode: GameMode, nickname: string, ack: Ack) => void;
+  "room:join": (code: string, nickname: string, ack: Ack) => void;
+  "room:ready": (ready: boolean, ack: Ack) => void;
+  "room:start": (ack: Ack) => void;
   "room:resume": (session: ReconnectSession, ack: Ack) => void;
   "room:leave": (ack: Ack) => void;
   "room:sync": (ack: Ack) => void;

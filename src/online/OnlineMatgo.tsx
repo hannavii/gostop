@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
+import { NICKNAME_MAX_LENGTH } from "../../shared/online";
+import RoomCode from "./RoomCode";
 import OnlineGameBoard from "./OnlineGameBoard";
 import type { ClientEvents, GameAction, Reply, RoomView, ServerEvents } from "../../shared/online";
 import "./online.css";
@@ -16,6 +18,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
   const [storageWarning, setStorageWarning] = useState("");
   const [busy, setBusy] = useState(false);
   const [room, setRoom] = useState<RoomView | null>(null);
+  const [nickname, setNickname] = useState("");
   const [code, setCode] = useState("");
   const [mode, setMode] = useState<GameMode>("matgo");
   const [message, setMessage] = useState("서버에 연결하는 중입니다.");
@@ -55,6 +58,8 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
     socket.on("disconnect", reason => {
       clearTimeout(retry);
       setConnected(false);
+      setRoom(previous => previous ? { ...previous, connections: previous.connections.map(player =>
+        player.seat === previous.you ? { ...player, connected: false } : player) } : null);
       sending.current = false;
       setBusy(false);
       setRestoring(false);
@@ -114,8 +119,9 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
   const game = room?.game;
   const enabled = connected && !busy && !restoring;
   const offline = room?.connections.filter(c => !c.connected) ?? [];
-  const connectionMessage = room && offline.length ? `${offline.map(c => c.seat === room.you ? "나" : room.mode === "gostop" ? `상대 ${(c.seat - room.you + 3) % 3}` : "상대방").join(", ")} 재접속 대기 중 · 해당 플레이어의 차례는 복귀할 때까지 기다립니다.` : "";
-  const displayedMessage = message || storageWarning || connectionMessage;
+  const connectionMessage = offline.length ? `${offline.map(c => c.nickname).join(", ")}님이 재접속 중입니다... 해당 플레이어의 차례는 복구될 때까지 기다립니다.` : "";
+  const displayedMessage = [message, storageWarning, connectionMessage].filter(Boolean).join(" ");
+  const validNickname = nickname.trim().length > 0 && nickname.trim().length <= NICKNAME_MAX_LENGTH;
   if (room && game) return <OnlineGameBoard key={room.code} room={room} game={game}
     enabled={enabled} message={displayedMessage} act={act}
     onSync={() => void request(s => s.timeout(5000).emitWithAck("room:sync"))}
@@ -140,35 +146,54 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
         <section className="online-lobby">
           <h2>친구와 함께 맞고 / 고스톱</h2>
           <p>방을 만들고 표시되는 6자리 코드를 상대방에게 알려주세요.</p>
+          <label className="online-nickname" htmlFor="online-nickname">닉네임
+            <input id="online-nickname" value={nickname} maxLength={NICKNAME_MAX_LENGTH} autoComplete="nickname"
+              placeholder="1~12자 닉네임" disabled={!enabled} onChange={event => setNickname(event.target.value)} />
+          </label>
           <label htmlFor="online-mode">게임 모드 </label>
           <select id="online-mode" value={mode} disabled={!enabled} onChange={event => setMode(event.target.value as GameMode)}>
             <option value="matgo">2인 맞고</option><option value="gostop">3인 고스톱</option>
           </select>
-          <button type="button" disabled={!enabled}
-            onClick={() => void request(s => s.timeout(5000).emitWithAck("room:create-mode", mode))}>방 만들기</button>
+          <button type="button" disabled={!enabled || !validNickname}
+            onClick={() => void request(s => s.timeout(5000).emitWithAck("room:create-mode", mode, nickname.trim()))}>방 만들기</button>
           <form onSubmit={event => {
             event.preventDefault();
-            void request(s => s.timeout(5000).emitWithAck("room:join", code.trim().toUpperCase()));
+            if (validNickname) void request(s => s.timeout(5000).emitWithAck("room:join", code.trim().toUpperCase(), nickname.trim()));
           }}>
             <label htmlFor="online-room-code">방 코드</label>
             <input id="online-room-code" value={code} maxLength={6} autoComplete="off"
               onChange={event => setCode(event.target.value.toUpperCase())} placeholder="6자리 코드" />
-            <button disabled={!enabled || !/^[A-Z0-9]{6}$/.test(code.trim())}>참가하기</button>
+            <button disabled={!enabled || !validNickname || !/^[A-Z0-9]{6}$/.test(code.trim())}>참가하기</button>
           </form>
-          <p>같은 탭에서 새로고침하거나 일시적으로 연결이 끊겨도 60초 안에 같은 좌석으로 복구할 수 있습니다. 방 나가기는 방을 종료합니다.</p>
+          <p>같은 탭에서 새로고침하거나 일시적으로 연결이 끊겨도 60초 안에 같은 좌석으로 복구할 수 있습니다. 대기실에서 나가면 남은 플레이어는 계속 기다립니다. 게임 중 나가면 방이 종료됩니다.</p>
         </section>
       ) : (
-        <>
-          <nav className="online-room-bar" aria-label="방 정보">
-            <strong>방 코드: <span className="online-code">{room.code}</span></strong>
-            <span>{room.mode === "gostop" ? "3인 고스톱" : "2인 맞고"} · {room.occupancy}/{room.capacity}명</span>
-            <button type="button" disabled={!enabled}
-              onClick={() => void request(s => s.timeout(5000).emitWithAck("room:sync"))}>상태 새로고침</button>
-            <button type="button" disabled={!enabled}
-              onClick={() => void request(s => s.timeout(5000).emitWithAck("room:leave"))}>방 나가기</button>
-          </nav>
-          <p className="online-waiting">상대방을 기다립니다. {room.capacity}명이 모이면 자동으로 시작합니다.</p>
-        </>
+        <section className="online-lobby online-waiting-room">
+          <h2>온라인 {room.mode === "gostop" ? "3인 고스톱" : "2인 맞고"}</h2>
+          <RoomCode code={room.code} />
+          <h3>플레이어 <small>{room.occupancy}/{room.capacity}명</small></h3>
+          <ul className="online-players">
+            {room.connections.map(player => <li key={player.seat}>
+              <div><strong>{player.seat === room.host && <span aria-label="방장">👑 </span>}{player.nickname}</strong>
+                {player.seat === room.you && <small> (나)</small>}
+                <small className={player.connected ? "online-connected" : "online-disconnected"}>{player.connected ? "접속 중" : "재접속 대기"}</small>
+              </div>
+              <span className={player.ready ? "online-ready" : ""}>{player.ready ? "준비 완료" : "준비 중"}</span>
+            </li>)}
+            {Array.from({ length: room.capacity - room.occupancy }, (_, i) => <li className="online-empty-seat" key={`empty-${i}`}>친구를 기다리고 있습니다</li>)}
+          </ul>
+          <div className="online-room-actions">
+            <button type="button" disabled={!enabled} onClick={() => void request(s => s.timeout(5000).emitWithAck("room:ready", !room.connections[room.you].ready))}>
+              {room.connections[room.you].ready ? "준비 취소" : "준비"}
+            </button>
+            {room.host === room.you && <button className="online-start" type="button"
+              disabled={!enabled || room.occupancy !== room.capacity || room.connections.some(p => !p.connected || !p.ready)}
+              onClick={() => void request(s => s.timeout(5000).emitWithAck("room:start"))}>게임 시작</button>}
+            <button type="button" disabled={!enabled} onClick={() => void request(s => s.timeout(5000).emitWithAck("room:leave"))}>방 나가기</button>
+            <button type="button" disabled={!enabled} onClick={() => void request(s => s.timeout(5000).emitWithAck("room:sync"))}>상태 새로고침</button>
+          </div>
+          <p>모든 플레이어가 접속하고 준비를 완료하면 방장이 게임을 시작할 수 있습니다.</p>
+        </section>
       )}
     </main>
   );

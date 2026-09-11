@@ -11,6 +11,94 @@ import type { GameMode } from "../../src/game/rules";
 import type { HwatuCard } from "../../src/types/game";
 
 type Peer = { socket: Socket<ServerEvents, ClientEvents>; view: RoomView | null; session: ReconnectSession | null; closed: string | null };
+
+for (const mode of ["matgo", "gostop"] as const) test(`${mode}: named lobby validates readiness, host authority, reconnect and private start`, async t => {
+  const h = await harness(t);
+  const host = await h.connect(), guest = await h.connect();
+  for (const invalid of ["", "   ", "a".repeat(13), "a\nb", "\u200b", null, 123, {}]) {
+    assert.equal((await host.socket.emitWithAck("room:create-mode", mode, invalid as string)).ok, false);
+    assert.equal((await host.socket.emitWithAck("room:create", invalid as string)).ok, false);
+    assert.equal(host.session, null);
+  }
+  assert.equal((await host.socket.emitWithAck("room:create-mode", mode, "  예랑  ")).ok, true);
+  assert.equal(host.view!.connections[0].nickname, "예랑");
+  assert.equal(host.view!.host, 0);
+  assert.equal(host.view!.connections[0].ready, false);
+  assert.equal((await host.socket.emitWithAck("room:ready", true)).ok, true);
+  assert.equal((await host.socket.emitWithAck("room:start")).ok, false);
+  for (const invalid of ["", " ", "a".repeat(13), null, {}]) {
+    assert.equal((await guest.socket.emitWithAck("room:join", host.view!.code, invalid as string)).ok, false);
+    assert.equal(guest.session, null);
+  }
+  assert.equal((await guest.socket.emitWithAck("room:join", host.view!.code, "철수")).ok, true);
+  const players = [host, guest];
+  assert.equal((await guest.socket.emitWithAck("room:ready", true)).ok, true);
+  if (mode === "gostop") {
+    assert.equal((await host.socket.emitWithAck("room:start")).ok, false);
+    const third = await h.connect();
+    assert.equal((await third.socket.emitWithAck("room:join", host.view!.code, "영희")).ok, true);
+    players.push(third);
+  }
+  assert.equal((await guest.socket.emitWithAck("room:ready", false)).ok, true);
+  await until(() => host.view!.connections[1].ready === false);
+  assert.equal((await host.socket.emitWithAck("room:start")).ok, false);
+  assert.equal((await guest.socket.emitWithAck("room:ready", "true" as unknown as boolean)).ok, false);
+  for (const p of players) assert.equal((await p.socket.emitWithAck("room:ready", true)).ok, true);
+  await until(() => players.every(p => p.view!.connections.every(c => c.ready)));
+  assert.ok(players.every(p => p.view!.game === null), "full ready room must not auto-start");
+  assert.equal((await guest.socket.emitWithAck("room:start")).ok, false);
+  const session = guest.session!;
+  guest.socket.disconnect();
+  await until(() => !host.view!.connections[1].connected);
+  assert.equal((await host.socket.emitWithAck("room:start")).ok, false);
+  const fresh = await h.connect();
+  assert.equal((await fresh.socket.emitWithAck("room:resume", session)).ok, true);
+  players[1] = fresh;
+  assert.equal(fresh.view!.connections[1].nickname, "철수");
+  assert.equal(fresh.view!.connections[1].ready, true);
+  assert.equal((await host.socket.emitWithAck("room:start")).ok, true);
+  await until(() => players.every(p => !!p.view?.game));
+  assertPrivacy(players);
+  const before = structuredClone(host.view!.game);
+  assert.equal((await host.socket.emitWithAck("room:start")).ok, false);
+  assert.equal((await host.socket.emitWithAck("room:ready", false)).ok, false);
+  assert.deepEqual(host.view!.game, before);
+  host.socket.disconnect();
+  await until(() => !fresh.view!.connections[0].connected);
+  assert.equal(fresh.view!.connections[0].nickname, "예랑");
+  assert.equal(fresh.view!.host, 0);
+  assert.equal(fresh.view!.game!.revision, before!.revision);
+});
+
+for (const expire of [false, true]) test(`lobby host succession on ${expire ? "grace expiry" : "explicit leave"} preserves remaining identities`, async t => {
+  const h = await harness(t, { reconnectGraceMs: 500 });
+  const host = await h.connect(), next = await h.connect(), third = await h.connect();
+  assert.equal((await host.socket.emitWithAck("room:create-mode", "gostop", "예랑")).ok, true);
+  const code = host.view!.code, credentials = host.session!;
+  assert.equal((await next.socket.emitWithAck("room:join", code, "철수")).ok, true);
+  assert.equal((await third.socket.emitWithAck("room:join", code, "영희")).ok, true);
+  assert.equal((await next.socket.emitWithAck("room:ready", true)).ok, true);
+  if (expire) {
+    host.socket.disconnect();
+    await until(() => !next.view!.connections[0].connected);
+    assert.equal(next.view!.host, 0);
+    assert.equal(next.view!.occupancy, 3);
+    assert.equal((await next.socket.emitWithAck("room:start")).ok, false);
+  } else assert.equal((await host.socket.emitWithAck("room:leave")).ok, true);
+  await until(() => next.view!.occupancy === 2 && third.view!.occupancy === 2);
+  assert.equal(next.closed, null);
+  assert.equal(next.view!.host, next.view!.you);
+  assert.equal(next.view!.connections[next.view!.host].nickname, "철수");
+  assert.equal(next.view!.connections[next.view!.you].ready, true);
+  assert.equal(third.view!.connections[third.view!.you].nickname, "영희");
+  const replacement = await h.connect();
+  assert.equal((await replacement.socket.emitWithAck("room:resume", credentials)).ok, false);
+  assert.equal((await replacement.socket.emitWithAck("room:join", code, "새친구")).ok, true);
+  for (const p of [next, third, replacement]) assert.equal((await p.socket.emitWithAck("room:ready", true)).ok, true);
+  assert.equal((await next.socket.emitWithAck("room:start")).ok, true);
+  await until(() => [next, third, replacement].every(p => !!p.view?.game));
+  assertPrivacy([next, third, replacement]);
+});
 async function until(check: () => boolean) {
   const end = Date.now() + 3000;
   while (!check()) { if (Date.now() > end) throw new Error("Reconnect test timed out"); await delay(5); }
@@ -38,13 +126,15 @@ async function harness(t: TestContext, options: Parameters<typeof createOnlineSe
   }
   async function room(mode: GameMode) {
     const first = await connect();
-    assert.equal((await first.socket.timeout(2000).emitWithAck("room:create-mode", mode)).ok, true);
+    assert.equal((await first.socket.timeout(2000).emitWithAck("room:create-mode", mode, "Host")).ok, true);
     const players = [first];
     for (let i = 1; i < (mode === "gostop" ? 3 : 2); i++) {
       const peer = await connect();
-      assert.equal((await peer.socket.timeout(2000).emitWithAck("room:join", first.view!.code)).ok, true);
+      assert.equal((await peer.socket.timeout(2000).emitWithAck("room:join", first.view!.code, "Guest")).ok, true);
       players.push(peer);
     }
+    for (const p of players) assert.equal((await p.socket.emitWithAck("room:ready", true)).ok, true);
+    assert.equal((await first.socket.emitWithAck("room:start")).ok, true);
     await until(() => players.every(p => !!p.view?.game && !!p.session));
     return players;
   }
@@ -146,7 +236,7 @@ for (const mode of ["matgo", "gostop"] as const) test(`${mode}: disconnect reser
   assert.equal(players[1].closed, null);
   assert.deepEqual(players[1].view!.game, before);
   const stranger = await h.connect();
-  assert.equal((await stranger.socket.timeout(2000).emitWithAck("room:join", old.view!.code)).ok, false);
+  assert.equal((await stranger.socket.timeout(2000).emitWithAck("room:join", old.view!.code, "Guest")).ok, false);
   assert.equal((await players[1].socket.timeout(2000).emitWithAck("game:action", move(players[1], "play", players[1].view!.game!.hand[0].id))).ok, false);
   await until(() => players.slice(1).every(p => !!p.closed));
   assert.match(players[1].closed!, /만료/);
@@ -167,8 +257,8 @@ test("a new server instance cannot recover an old process's token", async t => {
 test("waiting host can resume before game starts; recovery cancels old expiry; explicit leave invalidates token", async t => {
   const h = await harness(t, { reconnectGraceMs: 300 });
   const a = await h.connect(), observer = await h.connect();
-  assert.equal((await a.socket.timeout(2000).emitWithAck("room:create-mode", "gostop")).ok, true);
-  assert.equal((await observer.socket.timeout(2000).emitWithAck("room:join", a.view!.code)).ok, true);
+  assert.equal((await a.socket.timeout(2000).emitWithAck("room:create-mode", "gostop", "Host")).ok, true);
+  assert.equal((await observer.socket.timeout(2000).emitWithAck("room:join", a.view!.code, "Guest")).ok, true);
   a.socket.disconnect();
   await until(() => !observer.view!.connections[0].connected);
   const fresh = await h.connect();

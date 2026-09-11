@@ -92,6 +92,7 @@ try {
       await until(() => evaluate(sessionId, `!!document.querySelector('.online-mode-entry')`), 'mode entry');
       await evaluate(sessionId, `document.querySelector('.online-mode-entry').click()`);
       await ready(sessionId);
+      await evaluate(sessionId, `Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(document.querySelector('#online-nickname'),${JSON.stringify('친구' + i)});document.querySelector('#online-nickname').dispatchEvent(new Event('input',{bubbles:true}))`);
     }
     await evaluate(sessions[0], `document.querySelector('#online-mode').value=${JSON.stringify(mode)};document.querySelector('#online-mode').dispatchEvent(new Event('change',{bubbles:true}))`);
     await click(sessions[0], '방 만들기');
@@ -100,6 +101,27 @@ try {
       await evaluate(sessions[i], `Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(document.querySelector('#online-room-code'),${JSON.stringify(code)});document.querySelector('#online-room-code').dispatchEvent(new Event('input',{bubbles:true}))`);
       await evaluate(sessions[i], `document.querySelector('form').requestSubmit()`);
     }
+    for (const session of sessions) {
+      await until(() => evaluate(session, `!!document.querySelector('.online-waiting-room')`), 'waiting room');
+      assert.equal(await evaluate(session, `!!document.querySelector('.online-game-toolbar')`), false);
+    }
+    assert.equal(await evaluate(sessions[0], `document.querySelector('.online-start').disabled`), true);
+    await click(sessions[0], '방 코드 복사');
+    await until(() => evaluate(sessions[0], `document.querySelector('.online-room-code [role="status"]')?.textContent.includes('복사')`), 'copy feedback');
+    await evaluate(sessions[0], `Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('denied'); } } })`);
+    await click(sessions[0], '방 코드 복사');
+    await until(() => evaluate(sessions[0], `document.querySelector('.online-room-code [role="status"]')?.textContent.includes('직접 선택')`), 'clipboard failure fallback');
+    assert.equal(await evaluate(sessions[0], `document.querySelector('.online-code').textContent`), code);
+    for (const session of sessions) await click(session, '준비');
+    await until(() => evaluate(sessions[0], `!document.querySelector('.online-start').disabled`), 'all ready');
+    await click(sessions[1], '준비 취소');
+    await until(() => evaluate(sessions[0], `document.querySelector('.online-start').disabled`), 'cancel ready synchronized');
+    await click(sessions[1], '준비');
+    // F5 in lobby retains name, readiness and host, without dealing cards.
+    await rpc('Page.reload', { ignoreCache: true }, sessions[0]);
+    await until(() => evaluate(sessions[0], `document.querySelector('.online-start')?.disabled === false`), 'lobby F5 readiness recovery');
+    assert.ok(await evaluate(sessions[0], `document.querySelector('.online-players').textContent.includes('친구0')`));
+    await click(sessions[0], '게임 시작');
     for (const session of sessions) {
       await until(() => evaluate(session, `!!document.querySelector('.online-game-toolbar')`), 'game start');
       // Also obtains a snapshot if initial room events used HTTP polling.
@@ -132,6 +154,8 @@ try {
       assert.equal(recovered.you, seat);
       assert.equal(recovered.code, code);
       assert.deepEqual(recovered.game, before.game);
+      assert.deepEqual(recovered.connections.map(p => [p.nickname, p.ready]), before.connections.map(p => [p.nickname, p.ready]));
+      assert.equal(recovered.host, before.host);
       assert.deepEqual(await storage(session), credentials);
       for (let other = 0; other < count; other++) if (other !== seat) {
         const publicWire = JSON.stringify(recovered);
@@ -165,7 +189,7 @@ try {
     await until(() => evaluate(sessions[0], `!!document.querySelector('.online-game-toolbar button:not(:disabled)')`), 'leave enabled');
     await click(sessions[0], '방 나가기');
     for (const session of sessions) await until(async () => (await storage(session)) === null, 'credentials cleared on leave');
-    console.log(`PASS ${mode}: ${count} independent browser contexts, all seats F5 + transport drop → exact private state → continued game; tokens cleared on leave.`);
+    console.log(`PASS ${mode}: ${count} independent browser contexts, nickname → lobby → copy → ready/cancel → lobby F5 → host start; all seats F5 + transport drop → exact private state → continued game; tokens cleared on leave.`);
     for (const browserContextId of contexts) await rpc('Target.disposeBrowserContext', { browserContextId });
   }
   assert.equal(errors.length, 0, JSON.stringify(errors));

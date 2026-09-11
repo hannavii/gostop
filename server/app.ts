@@ -2,14 +2,15 @@ import express from "express";
 import { createServer } from "node:http";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { Server } from "socket.io";
+import { NICKNAME_MAX_LENGTH } from "../shared/online";
 import type { Ack, ClientEvents, ServerEvents, Seat } from "../shared/online";
 import { applyAction, createMatch, gameView, parseAction, type Match } from "./game";
 import { GAME_RULES, type GameMode } from "../src/game/rules";
 
 export const RECONNECT_GRACE_MS = 60_000;
-type Member = { socketId: string | null; tokenHash: Buffer; deadline: number | null;
+type Member = { nickname: string; ready: boolean; socketId: string | null; tokenHash: Buffer; deadline: number | null;
   timer: ReturnType<typeof setTimeout> | null };
-type Room = { code: string; mode: GameMode; members: Member[]; match: Match | null };
+type Room = { code: string; mode: GameMode; members: Member[]; host: Member | null; match: Match | null };
 const hashToken = (token: string) => createHash("sha256").update(token).digest();
 
 export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matchFactory = createMatch }: {
@@ -29,8 +30,9 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       // Never broadcast raw Room/Match, even to members of the same room.
       io.to(member.socketId).emit("room:state", {
         code: room.code, you: seat as Seat, occupancy: room.members.length,
+        host: room.members.indexOf(room.host!) as Seat,
         mode: room.mode, capacity: GAME_RULES[room.mode].playerCount,
-        connections: room.members.map((m, i) => ({ seat: i as Seat, connected: m.socketId !== null, reconnectDeadline: m.deadline })),
+        connections: room.members.map((m, i) => ({ seat: i as Seat, nickname: m.nickname, ready: m.ready, connected: m.socketId !== null, reconnectDeadline: m.deadline })),
         game: room.match ? gameView(room.match, seat as Seat) : null,
       });
     });
@@ -47,14 +49,39 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
     }
   }
 
+  function removeMember(room: Room, member: Member, reason: string) {
+    // Active matches keep immutable seat indices and the existing termination policy.
+    if (room.match) { closeRoom(room, reason); return; }
+    if (member.timer) clearTimeout(member.timer);
+    if (member.socketId) {
+      membership.delete(member.socketId);
+      io.to(member.socketId).emit("room:closed", reason);
+    }
+    room.members = room.members.filter(m => m !== member);
+    if (!room.members.length) { rooms.delete(room.code); return; }
+    if (room.host === member) room.host = room.members[0];
+    publish(room);
+  }
+
   function activeRoom(code: string) {
     const room = rooms.get(code);
     if (!room) throw new Error("방을 찾을 수 없습니다. 복구 시간이 지났거나 서버가 재시작되었을 수 있습니다.");
-    if (room.members.some(m => m.deadline !== null && m.deadline <= Date.now())) {
-      closeRoom(room, "재접속 대기 시간이 만료되어 방이 종료되었습니다.");
-      throw new Error("재접속 대기 시간이 만료되었습니다.");
+    for (const member of [...room.members]) {
+      if (member.deadline !== null && member.deadline <= Date.now()) {
+        removeMember(room, member, "재접속 대기 시간이 만료되었습니다.");
+        if (!rooms.has(code)) throw new Error("재접속 대기 시간이 만료되었습니다.");
+      }
     }
     return room;
+  }
+
+  function nickname(input: unknown) {
+    if (typeof input !== "string") throw new Error("닉네임을 입력해주세요.");
+    const value = input.trim();
+    if (!value || value.length > NICKNAME_MAX_LENGTH || /[\p{Cc}\p{Cf}]/u.test(value)) {
+      throw new Error(`닉네임은 1~${NICKNAME_MAX_LENGTH}자이며 제어 문자를 사용할 수 없습니다.`);
+    }
+    return value;
   }
 
   http.on("close", () => {
@@ -81,37 +108,38 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
     function requireLobby() {
       if (membership.has(socket.id)) throw new Error("이미 방에 참가 중입니다.");
     }
-    function addMember(room: Room) {
+    function addMember(room: Room, name: string) {
       const token = randomBytes(32).toString("hex");
-      room.members.push({ socketId: socket.id, tokenHash: hashToken(token), deadline: null, timer: null });
+      room.members.push({ nickname: name, ready: false, socketId: socket.id, tokenHash: hashToken(token), deadline: null, timer: null });
+      room.host ??= room.members[0];
       membership.set(socket.id, room.code);
       // Credentials go only to their owner, never in a public room snapshot.
       socket.emit("room:session", { roomCode: room.code, token });
     }
-    function createRoom(mode: GameMode, ack: Ack) { handle(ack, () => {
+    function createRoom(mode: GameMode, input: string, ack: Ack) { handle(ack, () => {
       if (mode !== "matgo" && mode !== "gostop") throw new Error("지원하지 않는 게임 모드입니다.");
       requireLobby();
+      const name = nickname(input);
       if (rooms.size >= 1000) throw new Error("현재 생성 가능한 방이 가득 찼습니다.");
       let code: string;
       do { code = randomInt(0, 36 ** 6).toString(36).toUpperCase().padStart(6, "0"); } while (rooms.has(code));
-      const room: Room = { code, mode, members: [], match: null };
+      const room: Room = { code, mode, members: [], host: null, match: null };
       rooms.set(code, room);
-      addMember(room);
+      addMember(room, name);
       publish(room);
     }); }
-    // Preserve the original two-player creation event for existing clients.
-    socket.on("room:create", ack => createRoom("matgo", ack));
-    socket.on("room:create-mode", (mode, ack) => createRoom(mode, ack));
-    socket.on("room:join", (input, ack) => handle(ack, () => {
+    // Both creation events require a validated nickname.
+    socket.on("room:create", (name, ack) => createRoom("matgo", name, ack));
+    socket.on("room:create-mode", (mode, name, ack) => createRoom(mode, name, ack));
+    socket.on("room:join", (input, nameInput, ack) => handle(ack, () => {
       requireLobby();
+      const name = nickname(nameInput);
       if (typeof input !== "string" || !/^[a-z0-9]{6}$/i.test(input)) throw new Error("방 코드는 영문·숫자 6자리입니다.");
       const code = input.toUpperCase();
       const room = activeRoom(code);
       const capacity = GAME_RULES[room.mode].playerCount;
       if (room.members.length >= capacity || room.match) throw new Error("방이 가득 찼습니다.");
-      const match = room.members.length + 1 === capacity ? matchFactory(room.mode) : null;
-      addMember(room);
-      room.match = match;
+      addMember(room, name);
       publish(room);
     }));
     socket.on("room:resume", (input, ack) => handle(ack, () => {
@@ -142,7 +170,25 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       socket.emit("room:session", { roomCode: room.code, token: input.token });
       publish(room);
     }));
-    socket.on("room:leave", ack => handle(ack, () => closeRoom(currentRoom(), "플레이어가 나가 방이 종료되었습니다.")));
+    socket.on("room:ready", (ready, ack) => handle(ack, () => {
+      const room = currentRoom();
+      if (room.match || typeof ready !== "boolean") throw new Error("대기실에서 준비 여부를 선택해주세요.");
+      room.members.find(m => m.socketId === socket.id)!.ready = ready;
+      publish(room);
+    }));
+    socket.on("room:start", ack => handle(ack, () => {
+      const room = currentRoom();
+      if (room.host?.socketId !== socket.id) throw new Error("방장만 게임을 시작할 수 있습니다.");
+      if (room.match) throw new Error("이미 시작한 게임입니다.");
+      if (room.members.length !== GAME_RULES[room.mode].playerCount ||
+        room.members.some(m => !m.socketId || !m.ready)) throw new Error("모든 인원이 접속하고 준비를 완료해야 합니다.");
+      room.match = matchFactory(room.mode);
+      publish(room);
+    }));
+    socket.on("room:leave", ack => handle(ack, () => {
+      const room = currentRoom();
+      removeMember(room, room.members.find(m => m.socketId === socket.id)!, "플레이어가 방을 나갔습니다.");
+    }));
     socket.on("room:sync", ack => handle(ack, () => publish(currentRoom())));
     socket.on("game:action", (input, ack) => handle(ack, () => {
       const action = parseAction(input);
@@ -164,7 +210,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       member.deadline = Date.now() + reconnectGraceMs;
       member.timer = setTimeout(() => {
         if (rooms.get(room.code) === room && member.socketId === null) {
-          closeRoom(room, "재접속 대기 시간이 만료되어 방이 종료되었습니다.");
+          removeMember(room, member, "재접속 대기 시간이 만료되었습니다.");
         }
       }, reconnectGraceMs);
       member.timer.unref();
