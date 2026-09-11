@@ -39,7 +39,7 @@ function App() {
 
           <button type="button" className="online-mode-entry"
             onClick={() => setSelectedMode("online")}>
-            <strong>온라인 2인 맞고</strong>
+            <strong>온라인 2인 맞고 / 3인 고스톱</strong>
             <span className="mode-card-description">방 코드로 친구와 함께 플레이</span>
           </button>
           <div className="mode-card-list">

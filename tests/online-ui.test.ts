@@ -7,10 +7,12 @@ import CapturedCardsModal from "../src/components/CapturedCardsModal";
 import MatgoTable from "../src/components/MatgoTable";
 import { hwatuCards } from "../src/data/cards";
 import type { GameView, Seat } from "../shared/online";
+import { createMatch, gameView } from "../server/game";
+import { calculateGostopSettlement } from "../src/game/gostopSettlement";
 
 function fixture(): GameView {
   return {
-    revision: 1, turn: 0, phase: "play", hand: hwatuCards.slice(0, 2),
+    mode: "matgo", revision: 1, turn: 0, phase: "play", hand: hwatuCards.slice(0, 2),
     players: [
       { seat: 0, handCount: 2, captured: [], score: 17, goCount: 2, bombCount: 1, bombPassCount: 2, shakeMonths: [1] },
       { seat: 1, handCount: 7, captured: [], score: 19, goCount: 3, bombCount: 0, bombPassCount: 0, shakeMonths: [] },
@@ -21,7 +23,7 @@ function fixture(): GameView {
 }
 function board(game: GameView, you: Seat = 0) {
   return renderToStaticMarkup(createElement(OnlineGameBoard, {
-    game, room: { code: "ABC123", you, occupancy: 2, game }, enabled: true,
+    game, room: { code: "ABC123", mode: game.mode, capacity: game.players.length, you, occupancy: game.players.length, game }, enabled: true,
     message: "", act() {}, onSync() {}, onLeave() {},
   }));
 }
@@ -87,4 +89,50 @@ test("shared table preserves ppeok grouping, expanded detail and played-card ove
     handleFloorCardChoice() {},
   }));
   assert.match(overlay, /played-card-overlay--player/);
+});
+
+test("three-seat board rotates opponents, uses all captured panels and hides both hands", () => {
+  const match = createMatch("gostop");
+  match.players[0].hand.pop();
+  match.players[2].hand.pop(); match.players[2].hand.pop();
+  match.ppeokStacks = [{ month: match.floor[0].month, owner: 2 }];
+  for (const you of [0, 1, 2] as const) {
+    const view = gameView(match, you), html = board(view, you);
+    for (const cls of ["gostop3-game", "gostop3-opponents-area", "gostop3-table", "gostop3-player-area",
+      "gostop3-captured-panel--opponent1", "gostop3-captured-panel--opponent2", "gostop3-captured-panel--player"]) assert.ok(html.includes(cls), cls);
+    for (const relative of [1, 2]) {
+      const hand = html.split(`aria-label="상대 ${relative} 손패">`)[1].split('</div>')[0];
+      // Card backs are empty divs; count across the full hand block up to its status paragraph.
+      const block = html.split(`aria-label="상대 ${relative} 손패">`)[1].split('<p>')[0];
+      assert.equal((block.match(/class="card-back"/g) ?? []).length, match.players[(you + relative) % 3].hand.length);
+      assert.ok(!hand.includes('class="card '));
+    }
+    assert.match(html, /3\/3명/);
+    assert.ok(html.includes(`${you === 2 ? "나" : `상대 ${(2 - you + 3) % 3}`}가 만든 뻑`));
+  }
+});
+
+test("three-seat choices and GO/STOP belong only to actor; settlement names rotate with viewer", () => {
+  const match = createMatch("gostop");
+  match.turn = 2;
+  match.phase = "go-stop";
+  for (const you of [0, 1, 2] as const) assert.equal(board(gameView(match, you), you).includes('go-stop-modal'), you === 2);
+  match.phase = "choose";
+  match.pending = { kind: "hand", card: match.players[2].hand[0], matches: match.floor.slice(0, 2) };
+  for (const you of [0, 1, 2] as const) assert.equal((board(gameView(match, you), you).match(/selectable/g) ?? []).length, you === 2 ? 2 : 0);
+  match.pending = null;
+  match.phase = "finished";
+  match.players[0].goCount = 1;
+  match.result = { winner: 2, settlement: null, gostopSettlement: calculateGostopSettlement({
+    winner: 2, players: match.players.map((p, i) => ({ index: i as Seat, cards: p.captured,
+      goCount: p.goCount, shakeCount: 0, bombCount: 0 })),
+  }) };
+  for (const you of [0, 1, 2] as const) {
+    const html = board(gameView(match, you), you);
+    assert.match(html, /gostop3-settlement-panel/);
+    assert.match(html, /고박 대납/);
+    assert.match(html, /총 획득/);
+    const payer = you === 0 ? "나" : `상대 ${(3 - you) % 3}`;
+    assert.ok(html.includes(`${payer} 고박:`));
+  }
 });

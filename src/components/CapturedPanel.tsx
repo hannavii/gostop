@@ -6,6 +6,7 @@ type CapturedPanelProps = {
   cards: HwatuCard[];
   score: Pick<ScoreResult, "total"> & Partial<ScoreResult>;
   side: "left" | "right";
+  position?: "opponent1" | "opponent2" | "player";
   goCount: number;
   shakeCount: number;
   shakeMonths: number[];
@@ -39,6 +40,7 @@ export default function CapturedPanel({
   cards,
   score,
   side,
+  position,
   goCount,
   shakeCount,
   shakeMonths,
@@ -83,7 +85,7 @@ export default function CapturedPanel({
 
   return (
     <aside
-      className={`captured-panel captured-panel--clickable captured-panel--${side}`}
+      className={`captured-panel captured-panel--clickable ${position ? `gostop3-captured-panel gostop3-captured-panel--${position}` : `captured-panel--${side}`}`}
       role="button"
       tabIndex={0}
       aria-label={`${title} 자세히 보기`}

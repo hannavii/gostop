@@ -3,6 +3,7 @@ import { io, type Socket } from "socket.io-client";
 import OnlineGameBoard from "./OnlineGameBoard";
 import type { ClientEvents, GameAction, Reply, RoomView, ServerEvents } from "../../shared/online";
 import "./online.css";
+import type { GameMode } from "../game/rules";
 
 type OnlineSocket = Socket<ServerEvents, ClientEvents>;
 export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
@@ -12,6 +13,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
   const [busy, setBusy] = useState(false);
   const [room, setRoom] = useState<RoomView | null>(null);
   const [code, setCode] = useState("");
+  const [mode, setMode] = useState<GameMode>("matgo");
   const [message, setMessage] = useState("서버에 연결하는 중입니다.");
 
   useEffect(() => {
@@ -79,16 +81,20 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
     <main className="online-page">
       <header className="online-header">
         <button type="button" onClick={onBack}>← 게임 선택</button>
-        <h1>온라인 2인 맞고</h1>
+        <h1>온라인 맞고 / 고스톱</h1>
         <span>{connected ? "연결됨" : "연결 중"}</span>
       </header>
       {message && <p className="online-message" role="status">{message}</p>}
       {!room ? (
         <section className="online-lobby">
-          <h2>친구와 함께 맞고</h2>
+          <h2>친구와 함께 맞고 / 고스톱</h2>
           <p>방을 만들고 표시되는 6자리 코드를 상대방에게 알려주세요.</p>
+          <label htmlFor="online-mode">게임 모드 </label>
+          <select id="online-mode" value={mode} disabled={!enabled} onChange={event => setMode(event.target.value as GameMode)}>
+            <option value="matgo">2인 맞고</option><option value="gostop">3인 고스톱</option>
+          </select>
           <button type="button" disabled={!enabled}
-            onClick={() => void request(s => s.timeout(5000).emitWithAck("room:create"))}>방 만들기</button>
+            onClick={() => void request(s => s.timeout(5000).emitWithAck("room:create-mode", mode))}>방 만들기</button>
           <form onSubmit={event => {
             event.preventDefault();
             void request(s => s.timeout(5000).emitWithAck("room:join", code.trim().toUpperCase()));
@@ -104,13 +110,13 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
         <>
           <nav className="online-room-bar" aria-label="방 정보">
             <strong>방 코드: <span className="online-code">{room.code}</span></strong>
-            <span>{room.occupancy}/2명</span>
+            <span>{room.mode === "gostop" ? "3인 고스톱" : "2인 맞고"} · {room.occupancy}/{room.capacity}명</span>
             <button type="button" disabled={!enabled}
               onClick={() => void request(s => s.timeout(5000).emitWithAck("room:sync"))}>상태 새로고침</button>
             <button type="button" disabled={!enabled}
               onClick={() => void request(s => s.timeout(5000).emitWithAck("room:leave"))}>방 나가기</button>
           </nav>
-          <p className="online-waiting">상대방을 기다립니다. 두 명이 모이면 자동으로 시작합니다.</p>
+          <p className="online-waiting">상대방을 기다립니다. {room.capacity}명이 모이면 자동으로 시작합니다.</p>
         </>
       )}
     </main>

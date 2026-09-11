@@ -4,8 +4,9 @@ import { randomInt } from "node:crypto";
 import { Server } from "socket.io";
 import type { Ack, ClientEvents, ServerEvents, Seat } from "../shared/online";
 import { applyAction, createMatch, gameView, parseAction, type Match } from "./game";
+import { GAME_RULES, type GameMode } from "../src/game/rules";
 
-type Room = { code: string; members: string[]; match: Match | null };
+type Room = { code: string; mode: GameMode; members: string[]; match: Match | null };
 
 export function createOnlineServer() {
   const app = express();
@@ -20,6 +21,7 @@ export function createOnlineServer() {
       // Never broadcast raw Room/Match, even to members of the same room.
       io.to(id).emit("room:state", {
         code: room.code, you: seat as Seat, occupancy: room.members.length,
+        mode: room.mode, capacity: GAME_RULES[room.mode].playerCount,
         game: room.match ? gameView(room.match, seat as Seat) : null,
       });
     });
@@ -56,24 +58,29 @@ export function createOnlineServer() {
     function requireLobby() {
       if (membership.has(socket.id)) throw new Error("이미 방에 참가 중입니다.");
     }
-    socket.on("room:create", ack => handle(ack, () => {
+    function createRoom(mode: GameMode, ack: Ack) { handle(ack, () => {
+      if (mode !== "matgo" && mode !== "gostop") throw new Error("지원하지 않는 게임 모드입니다.");
       requireLobby();
       if (rooms.size >= 1000) throw new Error("현재 생성 가능한 방이 가득 찼습니다.");
       let code: string;
       do { code = randomInt(0, 36 ** 6).toString(36).toUpperCase().padStart(6, "0"); } while (rooms.has(code));
-      const room: Room = { code, members: [socket.id], match: null };
+      const room: Room = { code, mode, members: [socket.id], match: null };
       rooms.set(code, room);
       membership.set(socket.id, code);
       publish(room);
-    }));
+    }); }
+    // Preserve the original two-player creation event for existing clients.
+    socket.on("room:create", ack => createRoom("matgo", ack));
+    socket.on("room:create-mode", (mode, ack) => createRoom(mode, ack));
     socket.on("room:join", (input, ack) => handle(ack, () => {
       requireLobby();
       if (typeof input !== "string" || !/^[a-z0-9]{6}$/i.test(input)) throw new Error("방 코드는 영문·숫자 6자리입니다.");
       const code = input.toUpperCase();
       const room = rooms.get(code);
       if (!room) throw new Error("방을 찾을 수 없습니다.");
-      if (room.members.length !== 1 || room.match) throw new Error("이미 두 명이 참가한 방입니다.");
-      const match = createMatch();
+      const capacity = GAME_RULES[room.mode].playerCount;
+      if (room.members.length >= capacity || room.match) throw new Error("방이 가득 찼습니다.");
+      const match = room.members.length + 1 === capacity ? createMatch(room.mode) : null;
       room.members.push(socket.id);
       membership.set(socket.id, code);
       room.match = match;
@@ -85,10 +92,10 @@ export function createOnlineServer() {
       const action = parseAction(input);
       const room = currentRoom();
       if (room.code !== action.roomCode) throw new Error("현재 참가한 방의 요청이 아닙니다.");
-      if (!room.match) throw new Error("두 번째 플레이어를 기다리는 중입니다.");
+      if (!room.match) throw new Error("플레이어가 모두 참가하기를 기다리는 중입니다.");
       const seat = room.members.indexOf(socket.id);
-      if (seat !== 0 && seat !== 1) throw new Error("방의 플레이어가 아닙니다.");
-      room.match = applyAction(room.match, seat, action);
+      if (seat < 0 || seat >= GAME_RULES[room.mode].playerCount) throw new Error("방의 플레이어가 아닙니다.");
+      room.match = applyAction(room.match, seat as Seat, action);
       publish(room);
     }));
     socket.on("disconnect", () => leave(socket.id));

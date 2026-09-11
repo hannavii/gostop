@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import type { GameAction, GameView, RoomView, Seat } from "../../shared/online";
 import Card from "../components/Card";
 import CapturedPanel from "../components/CapturedPanel";
@@ -7,6 +7,7 @@ import MatgoTable from "../components/MatgoTable";
 import { GAME_SPEED, GAME_SPEED_STYLE } from "../components/matgoSpeed";
 import { getSpecialEventName } from "../components/matgoEvents";
 import type { HwatuCard } from "../types/game";
+import GostopOnlineSettlement from "./GostopOnlineSettlement";
 
 type Props = {
   room: RoomView; game: GameView; enabled: boolean; message: string;
@@ -74,7 +75,10 @@ export default function OnlineGameBoard({ room, game, enabled, message, act, onS
   const [expandedPpeokMonth, setExpandedPpeokMonth] = useState<number | null>(null);
   const visual = usePresentation(game, room.you);
   const mine = game.players[room.you];
-  const opponent = game.players[room.you === 0 ? 1 : 0];
+  const three = game.mode === "gostop";
+  const relativeSeat = (seat: Seat) => (seat - room.you + game.players.length) % game.players.length;
+  const opponents = game.players.filter(p => p.seat !== room.you).sort((a, b) => relativeSeat(a.seat) - relativeSeat(b.seat));
+  const name = (seat: Seat) => seat === room.you ? "나" : three ? `상대 ${relativeSeat(seat)}` : "상대방";
   const myTurn = game.turn === room.you;
   const finished = game.phase === "finished";
   const animating = Boolean(visual.card || visual.captured || visual.effect);
@@ -85,9 +89,9 @@ export default function OnlineGameBoard({ room, game, enabled, message, act, onS
   const turnMessage = message || (finished ? "게임이 끝났습니다." : !myTurn
     ? game.phase === "choose" ? "상대방이 바닥패를 선택하고 있습니다." : game.phase === "go-stop" ? "상대방이 GO / STOP을 선택하고 있습니다." : "상대방 차례입니다."
     : game.phase === "play" ? "낼 카드를 선택하세요." : "");
-  return <main className={`game online-matgo-game ${animating ? "is-animating" : ""}`} style={GAME_SPEED_STYLE}>
+  return <main className={`game ${three ? "gostop3-game online-gostop-game" : "online-matgo-game"} ${animating ? "is-animating" : ""}`} style={GAME_SPEED_STYLE}>
     <nav className="online-game-toolbar" aria-label="방 정보">
-      <span>방 <strong>{room.code}</strong> · {room.occupancy}/2명</span>
+      <span>방 <strong>{room.code}</strong> · {room.occupancy}/{room.capacity}명 · {three ? "3인 고스톱" : "2인 맞고"}</span>
       <button disabled={!enabled} onClick={onSync}>새로고침</button>
       <button disabled={!enabled} onClick={onLeave}>방 나가기</button>
     </nav>
@@ -103,30 +107,39 @@ export default function OnlineGameBoard({ room, game, enabled, message, act, onS
     {visual.captured && <div className="capture-flight-layer" aria-hidden="true"><div key={visual.captured.side} className={`capture-flight capture-flight--${visual.captured.side}`}>
       {visual.captured.cards.map((card, index) => <div key={card.id} className="capture-flight-card" style={{ left: index * 10, top: index * 4 }}><Card card={card} /></div>)}
     </div></div>}
-    {selected && <CapturedCardsModal title={detail === room.you ? "내 먹은 패" : "상대 먹은 패"}
+    {selected && <CapturedCardsModal title={detail === room.you ? "내 먹은 패" : `${name(selected.seat)} 먹은 패`}
       cards={selected.captured} totalScore={selected.score} goCount={selected.goCount}
       shakeMonths={selected.shakeMonths} bombCount={selected.bombCount} onClose={() => setDetail(null)} />}
-    {[opponent, mine].map(player => <CapturedPanel key={player.seat}
-      title={player.seat === room.you ? "내 먹은 패" : "상대 먹은 패"}
+    {[...opponents, mine].map(player => <CapturedPanel key={player.seat}
+      title={player.seat === room.you ? "내 먹은 패" : `${three ? name(player.seat) : "상대"} 먹은 패`}
+      position={three ? player.seat === room.you ? "player" : relativeSeat(player.seat) === 1 ? "opponent1" : "opponent2" : undefined}
       side={player.seat === room.you ? "right" : "left"} cards={player.captured}
       score={{ total: player.score }} goCount={player.goCount} shakeCount={player.shakeMonths.length} shakeMonths={player.shakeMonths} bombCount={player.bombCount}
       onOpenDetails={() => setDetail(player.seat)} />)}
-    <section className="opponent-area">
-      <h2>상대방{!myTurn && !finished && " ◀"}</h2>
-      <div className="card-row" aria-label="상대 손패">
+    <section className={three ? "gostop3-opponents-area" : "opponent-area"}>
+      {opponents.map(opponent => {
+        const content = <>
+      <h2>{name(opponent.seat)}{game.turn === opponent.seat && !finished && " ◀"}</h2>
+      <div className={`card-row${three ? " gostop3-opponent-hand" : ""}`} aria-label={three ? `${name(opponent.seat)} 손패` : "상대 손패"}>
         {Array.from({ length: opponent.handCount }, (_, i) => <Card key={i} isBack />)}
       </div>
       <p>손패 {opponent.handCount}장 · 점수 {opponent.score}점 · GO {opponent.goCount}회 · 폭탄패 {opponent.bombPassCount}장</p>
+      </>;
+        return three ? <div key={opponent.seat} className="gostop3-opponent-zone">{content}</div>
+          : <Fragment key={opponent.seat}>{content}</Fragment>;
+      })}
     </section>
-    <MatgoTable floorCards={game.floor} ppeokStacks={game.ppeokStacks.map(stack => ({ ...stack,
-      owner: (stack.owner === "player" ? 0 : 1) === room.you ? "player" : "opponent" }))}
+    <MatgoTable className={three ? "gostop3-table" : undefined}
+      ppeokLabels={three ? Object.fromEntries(game.ppeokStacks.map(stack => [stack.month, `${name(stack.owner)}가 만든 뻑`])) : undefined}
+      floorCards={game.floor} ppeokStacks={game.ppeokStacks.map(stack => ({ ...stack,
+      owner: stack.owner === room.you ? "player" : "opponent" }))}
       expandedPpeokMonth={expandedPpeokMonth} setExpandedPpeokMonth={setExpandedPpeokMonth}
       pendingChoice={myTurn && game.choice ? { matchingCards: game.choice } : null}
       turnMessage={turnMessage} isAnimating={!canAct} gameOver={finished}
       gameStarted drawCount={game.drawCount} handleFloorCardChoice={card => act("choose", card.id)} />
-    <section className="player-area">
+    <section className={`player-area${three ? " gostop3-player-area" : ""}`}>
       <h2>내 패{myTurn && !finished && " ◀"}</h2>
-      <div className="card-row" aria-label="내 손패">{game.hand.map(card => <Card key={card.id} card={card}
+      <div className={`card-row${three ? " gostop3-player-hand" : ""}`} aria-label="내 손패">{game.hand.map(card => <Card key={card.id} card={card}
         onClick={canAct && myTurn && game.phase === "play" && !specialPrompt ? () => {
           const option = game.specialOptions.find(option => option.cardId === card.id);
           if (option) setPrompt({ ...option, revision: game.revision });
@@ -154,8 +167,11 @@ export default function OnlineGameBoard({ room, game, enabled, message, act, onS
     </div></div>}
     {result && !animating && <div className="game-over-overlay"><div className="game-over-modal">
       <div className="game-over-label">게임 종료</div>
-      <h2>{result.winner === "draw" ? "나가리 · 무승부" : result.winner === room.you ? "승리!" : "상대방 승리"}</h2>
-      <div className="game-over-score-board"><span>내 점수 {mine.score}점</span><span>상대 점수 {opponent.score}점</span></div>
+      <h2>{result.winner === "draw" ? "나가리 · 무승부" : result.winner === room.you ? "승리!" : `${name(result.winner)} 승리`}</h2>
+      {three ? <div className="gostop3-final-scores">{[mine, ...opponents].map(p =>
+        <div key={p.seat}><span>{name(p.seat)} 점수</span><strong>{p.score}점</strong><small>{p.goCount} GO</small></div>)}</div>
+        : <div className="game-over-score-board"><span>내 점수 {mine.score}점</span><span>상대 점수 {opponents[0].score}점</span></div>}
+      {result.gostopSettlement && <GostopOnlineSettlement settlement={result.gostopSettlement} name={name} />}
       {settlement && <div className="settlement-board">
         <div className="settlement-row"><span>기본 점수</span><strong>{settlement.baseScore}점</strong></div>
         <div className="settlement-row"><span>GO 추가 점수</span><strong>+{settlement.goBonus}점</strong></div>

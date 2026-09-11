@@ -112,7 +112,7 @@ test("passes may precede hand play and preserve ppeok capture and last-action sw
     match.players[0].bombPassCount = 1;
     match.floor = [card(3, 1), card(3, 2), card(3, 3)];
     match.pile = [card(3, 4), card(11, 1)];
-    match.ppeokStacks = [{ month: 3, owner: "player" }];
+    match.ppeokStacks = [{ month: 3, owner: 0 }];
     const next = applyAction(match, 0, action(match, "bomb-pass"));
     assert.equal(next.players[0].hand.length, remaining);
     assert.equal(next.players[0].bombPassCount, 0);

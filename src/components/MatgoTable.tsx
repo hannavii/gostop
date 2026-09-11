@@ -15,6 +15,8 @@ type FloorDisplayItem =
       owner: Turn;
     };
 type Props = {
+ className?: string;
+ ppeokLabels?: Record<number, string>;
  floorCards: HwatuCard[]; ppeokStacks: PpeokStack[];
  expandedPpeokMonth: number | null;
  setExpandedPpeokMonth: Dispatch<SetStateAction<number | null>>;
@@ -24,7 +26,7 @@ type Props = {
  gameStarted: boolean; drawCount: number;
  handleFloorCardChoice: (card: HwatuCard) => void | Promise<void>;
 };
-export default function MatgoTable({floorCards,ppeokStacks,expandedPpeokMonth,setExpandedPpeokMonth,pendingChoice,pendingPlayedVisual,turnMessage,isAnimating,gameOver,gameStarted,drawCount,handleFloorCardChoice}: Props) {
+export default function MatgoTable({className, ppeokLabels, floorCards,ppeokStacks,expandedPpeokMonth,setExpandedPpeokMonth,pendingChoice,pendingPlayedVisual,turnMessage,isAnimating,gameOver,gameStarted,drawCount,handleFloorCardChoice}: Props) {
   const floorDisplayItems: FloorDisplayItem[] = [];
   const renderedPpeokMonths = new Set<number>();
 
@@ -56,7 +58,7 @@ export default function MatgoTable({floorCards,ppeokStacks,expandedPpeokMonth,se
 
 
  return (
-      <section className="table">
+      <section className={`table${className ? ` ${className}` : ""}`}>
         <h2>
           바닥패
           {ppeokStacks.length > 0 && (
@@ -88,7 +90,7 @@ export default function MatgoTable({floorCards,ppeokStacks,expandedPpeokMonth,se
                     tabIndex={0}
                     aria-expanded={isExpanded}
                     aria-label={`${item.month}월 뻑 ${item.cards.length}장. ${
-                      item.owner === "player" ? "내가 만든 뻑" : "상대가 만든 뻑"
+                      ppeokLabels?.[item.month] ?? (item.owner === "player" ? "내가 만든 뻑" : "상대가 만든 뻑")
                     }. 클릭하면 카드 목록을 ${isExpanded ? "닫습니다" : "봅니다"}.`}
                     onClick={() =>
                       setExpandedPpeokMonth((current) =>
@@ -120,7 +122,7 @@ export default function MatgoTable({floorCards,ppeokStacks,expandedPpeokMonth,se
 
                     <div className="ppeok-stack-label">
                       <strong>{item.month}월 뻑</strong>
-                      <span>{item.cards.length}장 · {item.owner === "player" ? "내 뻑" : "상대 뻑"}</span>
+                      <span>{item.cards.length}장 · {ppeokLabels?.[item.month] ?? (item.owner === "player" ? "내 뻑" : "상대 뻑")}</span>
                     </div>
 
                     <div className="ppeok-stack-detail">
@@ -138,9 +140,9 @@ export default function MatgoTable({floorCards,ppeokStacks,expandedPpeokMonth,se
                       </div>
 
                       <div className="ppeok-stack-detail-note">
-                        {item.owner === "player"
+                        {ppeokLabels?.[item.month] ?? (item.owner === "player"
                           ? "내가 만든 뻑입니다."
-                          : "상대방이 만든 뻑입니다."}
+                          : "상대방이 만든 뻑입니다.")}
                       </div>
                     </div>
                   </div>

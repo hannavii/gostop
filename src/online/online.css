@@ -17,6 +17,10 @@
 .online-message { color: #ffdf9c; }
 .online-waiting { margin: 60px auto; text-align: center; }
 .online-code { letter-spacing: .15em; color: #ffdf9c; font-size: 22px; }
+.online-lobby select { padding: 10px; margin: 0 10px 12px 0; border-radius: 8px; font: inherit; }
+.online-gostop-game .online-game-toolbar { max-width: calc(100% - 24px); }
+.online-gostop-game .gostop3-opponent-hand .card-back { width: clamp(24px, 3vw, 44px); height: clamp(40px, 5vw, 70px); }
+.online-gostop-game .game-over-modal { max-height: calc(100dvh - 32px); overflow-y: auto; }
 .online-game-toolbar { position: absolute; top: 8px; left: 12px; z-index: 40; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; max-width: 42%; font-size: 11px; }
 .online-game-toolbar strong { letter-spacing: .08em; color: #ffdf9c; }
 .online-game-toolbar button { padding: 4px 7px; border: 1px solid #ffffff40; border-radius: 6px; background: #174c36; color: white; cursor: pointer; font: inherit; }

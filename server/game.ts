@@ -1,14 +1,15 @@
 import { hwatuCards } from "../src/data/cards";
-import { dealCards } from "../src/game/deal";
-import { GAME_RULES } from "../src/game/rules";
+import { dealCards, dealGostopCards } from "../src/game/deal";
+import { GAME_RULES, type GameMode } from "../src/game/rules";
 import { calculateScore } from "../src/game/scoring";
 import { calculateSettlement } from "../src/game/settlement";
-import {
-  applyPansseul, finalizePreparedPlay, prepareHandPlay, resolveDrawChoice,
-  resolveTurnDraw, resolveDrawOnly, stealPiCards, getBombActionForMonth, canShakeMonth,
-  type DrawChoiceState, type DrawResult, type PpeokStack,
-  type PreparedPlay, type SpecialEvent, type TurnCompleteResult,
-} from "../src/game/turn";
+import { calculateGostopSettlement } from "../src/game/gostopSettlement";
+import type {
+  GostopDrawChoiceState as DrawChoiceState, GostopDrawResult as DrawResult,
+  GostopPpeokStack as PpeokStack, GostopPreparedPlay as PreparedPlay,
+  GostopSpecialEvent as SpecialEvent, GostopTurnCompleteResult as TurnCompleteResult,
+} from "../src/game/gostopTurn";
+import { turnEngine } from "./turnEngine";
 import type { HwatuCard } from "../src/types/game";
 import type { GameAction, GameView, Seat } from "../shared/online";
 
@@ -17,10 +18,11 @@ type Player = { hand: HwatuCard[]; captured: HwatuCard[]; goCount: number; lastG
 type Pending = { kind: "hand"; card: HwatuCard; matches: HwatuCard[] }
   | { kind: "draw"; choice: DrawChoiceState };
 export type Match = {
+  mode: GameMode;
   revision: number;
   turn: Seat;
   phase: GameView["phase"];
-  players: [Player, Player];
+  players: Player[];
   floor: HwatuCard[];
   pile: HwatuCard[];
   pending: Pending | null;
@@ -29,16 +31,16 @@ export type Match = {
   ppeokStacks: PpeokStack[];
   result: GameView["result"];
 };
-const side = (seat: Seat) => seat === 0 ? "player" as const : "opponent" as const;
-const other = (seat: Seat): Seat => seat === 0 ? 1 : 0;
-
-export function createMatch(): Match {
-  const dealt = dealCards(hwatuCards);
+export function createMatch(mode: GameMode = "matgo"): Match {
+  if (mode !== "matgo" && mode !== "gostop") throw new Error("지원하지 않는 게임 모드입니다.");
+  const dealt = mode === "gostop" ? dealGostopCards(hwatuCards) : dealCards(hwatuCards);
+  const hands = "opponentCards" in dealt ? [dealt.playerCards, dealt.opponentCards]
+    : [dealt.playerCards, dealt.opponent1Cards, dealt.opponent2Cards];
   const player = (hand: HwatuCard[]): Player => ({ hand, captured: [], goCount: 0, lastGoScore: 0,
     bombCount: 0, bombPassCount: 0, shakeMonths: [] });
   return {
-    revision: 0, turn: 0, phase: "play",
-    players: [player(dealt.playerCards), player(dealt.opponentCards)],
+    mode, revision: 0, turn: 0, phase: "play",
+    players: hands.map(player),
     floor: dealt.floorCards, pile: dealt.drawPile, pending: null,
     revealed: [], events: [], ppeokStacks: [], result: null,
   };
@@ -49,24 +51,27 @@ function advance(match: Match) {
     match.phase = "finished";
     match.result = { winner: "draw", settlement: null };
   } else {
-    match.turn = other(match.turn);
+    match.turn = ((match.turn + 1) % match.players.length) as Seat;
     match.phase = "play";
   }
 }
 
 function complete(match: Match, raw: TurnCompleteResult) {
   const player = match.players[match.turn];
-  const opponent = match.players[other(match.turn)];
-  const result = applyPansseul(raw, player.hand.length + player.bombPassCount);
-  const stolen = stealPiCards(opponent.captured, result.stealPi);
-  player.captured.push(...result.capturedCards, ...stolen.stolenCards);
-  opponent.captured = stolen.remainingCards;
+  const engine = turnEngine(match.mode);
+  const result = engine.applyPansseul(raw, player.hand.length + player.bombPassCount);
+  player.captured.push(...result.capturedCards);
+  for (const opponent of match.players.filter(p => p !== player)) {
+    const stolen = engine.stealPiCards(opponent.captured, result.stealPi);
+    player.captured.push(...stolen.stolenCards);
+    opponent.captured = stolen.remainingCards;
+  }
   match.floor = result.floorCards;
   match.ppeokStacks = result.ppeokStacks;
   match.events = [...new Set([...match.events, ...result.specialEvents])];
   match.pending = null;
   const score = calculateScore(player.captured).total;
-  if (score >= GAME_RULES.matgo.goStopScore && score > player.lastGoScore) {
+  if (score >= GAME_RULES[match.mode].goStopScore && score > player.lastGoScore) {
     match.phase = "go-stop";
   } else {
     advance(match);
@@ -86,18 +91,18 @@ function acceptDraw(match: Match, result: DrawResult) {
 function draw(match: Match, prepared: PreparedPlay) {
   const drawn = match.pile.shift();
   if (!drawn) {
-    complete(match, finalizePreparedPlay(prepared));
+    complete(match, turnEngine(match.mode).finalizePreparedPlay(prepared));
     return;
   }
   match.revealed.push(drawn);
-  acceptDraw(match, resolveTurnDraw(prepared, drawn));
+  acceptDraw(match, turnEngine(match.mode).resolveTurnDraw(prepared, drawn));
 }
 
 function drawOnly(match: Match, capturedCards: HwatuCard[] = [], stealPi = 0) {
   const drawn = match.pile.shift();
   if (drawn) {
     match.revealed.push(drawn);
-    acceptDraw(match, resolveDrawOnly(drawn, match.floor, side(match.turn), match.ppeokStacks,
+    acceptDraw(match, turnEngine(match.mode).resolveDrawOnly(drawn, match.floor, match.turn, match.ppeokStacks,
       capturedCards, stealPi, match.events));
   } else {
     complete(match, { type: "complete", floorCards: match.floor, capturedCards, stealPi,
@@ -128,11 +133,13 @@ export function parseAction(input: unknown): GameAction {
 // Synchronous, atomic transition: invalid actions cannot partially mutate the match.
 export function applyAction(current: Match, seat: Seat, action: GameAction): Match {
   parseAction(action);
+  if (!Number.isInteger(seat) || seat < 0 || seat >= current.players.length) throw new Error("방의 플레이어가 아닙니다.");
   if (action.revision !== current.revision) throw new Error("지난 게임 상태의 요청입니다. 다시 선택해주세요.");
   if (current.phase === "finished") throw new Error("이미 종료된 게임입니다.");
   if (seat !== current.turn) throw new Error("상대방 차례입니다.");
   const match = structuredClone(current);
   const player = match.players[seat];
+  const engine = turnEngine(match.mode);
 
   if (action.type === "bomb-pass") {
     if (match.phase !== "play" || player.bombPassCount <= 0) throw new Error("사용 가능한 폭탄 패스가 없습니다.");
@@ -145,7 +152,7 @@ export function applyAction(current: Match, seat: Seat, action: GameAction): Mat
     const card = player.hand.find(c => c.id === action.cardId);
     if (!card) throw new Error("자신의 손패에 없는 카드입니다.");
     if (action.type === "bomb") {
-      const bomb = getBombActionForMonth(player.hand, match.floor, card.month);
+      const bomb = engine.getBombActionForMonth(player.hand, match.floor, card.month);
       if (!bomb) throw new Error("폭탄을 사용할 수 없습니다.");
       player.hand = player.hand.filter(c => c.month !== card.month);
       match.floor = match.floor.filter(c => c.id !== bomb.floorCard.id);
@@ -158,12 +165,12 @@ export function applyAction(current: Match, seat: Seat, action: GameAction): Mat
       return match;
     }
     if (action.type === "shake") {
-      if (player.shakeMonths.includes(card.month) || !canShakeMonth(player.hand, match.floor, card.month)) {
+      if (player.shakeMonths.includes(card.month) || !engine.canShakeMonth(player.hand, match.floor, card.month)) {
         throw new Error("흔들기를 선언할 수 없습니다.");
       }
       player.shakeMonths.push(card.month);
     }
-    const prepared = prepareHandPlay(card, match.floor, side(seat), match.ppeokStacks);
+    const prepared = engine.prepareHandPlay(card, match.floor, seat, match.ppeokStacks);
     player.hand = player.hand.filter(c => c.id !== card.id);
     match.revealed = [card];
     match.events = action.type === "shake" ? ["shake"] : [];
@@ -180,17 +187,23 @@ export function applyAction(current: Match, seat: Seat, action: GameAction): Mat
     const selected = choices.find(c => c.id === action.cardId);
     if (!selected) throw new Error("선택 가능한 바닥패가 아닙니다.");
     if (pending.kind === "hand") {
-      const prepared = prepareHandPlay(pending.card, match.floor, side(seat), match.ppeokStacks, selected.id);
+      const prepared = engine.prepareHandPlay(pending.card, match.floor, seat, match.ppeokStacks, selected.id);
       if (prepared.type !== "ready") throw new Error("패 선택을 처리할 수 없습니다.");
       draw(match, prepared.prepared);
     } else {
-      complete(match, resolveDrawChoice(pending.choice, selected));
+      complete(match, engine.resolveDrawChoice(pending.choice, selected));
     }
   } else {
     if (match.phase !== "go-stop") throw new Error("GO/STOP을 선언할 수 없습니다.");
     if (action.type === "stop") {
-      const opponent = match.players[other(seat)];
-      match.result = {
+      const opponent = match.players[seat === 0 ? 1 : 0];
+      match.result = match.mode === "gostop" ? {
+        winner: seat, settlement: null,
+        gostopSettlement: calculateGostopSettlement({ winner: seat, players: match.players.map((p, index) => ({
+          index: index as Seat, cards: p.captured, goCount: p.goCount,
+          shakeCount: p.shakeMonths.length, bombCount: p.bombCount,
+        })) }),
+      } : {
         winner: seat,
         settlement: calculateSettlement(player.captured, opponent.captured, player.goCount, opponent.goCount,
           player.shakeMonths.length, player.bombCount),
@@ -207,9 +220,11 @@ export function applyAction(current: Match, seat: Seat, action: GameAction): Mat
 }
 
 export function gameView(match: Match, seat: Seat): GameView {
+  if (!Number.isInteger(seat) || seat < 0 || seat >= match.players.length) throw new Error("방의 플레이어가 아닙니다.");
   const pending = match.pending;
+  const engine = turnEngine(match.mode);
   return structuredClone({
-    revision: match.revision, turn: match.turn, phase: match.phase,
+    mode: match.mode, revision: match.revision, turn: match.turn, phase: match.phase,
     hand: match.players[seat].hand,
     players: match.players.map((p, i) => ({
       seat: i as Seat, handCount: p.hand.length, captured: p.captured,
@@ -217,10 +232,10 @@ export function gameView(match: Match, seat: Seat): GameView {
       bombCount: p.bombCount, bombPassCount: p.bombPassCount, shakeMonths: p.shakeMonths,
     })),
     specialOptions: seat === match.turn && match.phase === "play" ? match.players[seat].hand.flatMap<GameView["specialOptions"][number]>(card => {
-      if (getBombActionForMonth(match.players[seat].hand, match.floor, card.month)) {
+      if (engine.getBombActionForMonth(match.players[seat].hand, match.floor, card.month)) {
         return [{ cardId: card.id, type: "bomb" as const }];
       }
-      if (!match.players[seat].shakeMonths.includes(card.month) && canShakeMonth(match.players[seat].hand, match.floor, card.month)) {
+      if (!match.players[seat].shakeMonths.includes(card.month) && engine.canShakeMonth(match.players[seat].hand, match.floor, card.month)) {
         return [{ cardId: card.id, type: "shake" as const }];
       }
       return [];
