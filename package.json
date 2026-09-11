@@ -10,7 +10,8 @@
     "start:server": "node dist/server/index.mjs",
     "typecheck": "tsc -b && tsc -p server/tsconfig.json",
     "build:server": "tsc -p server/tsconfig.json && esbuild server/index.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/server/index.mjs",
-    "test:online": "tsx --test server/tests/game.test.ts server/tests/gostop.test.ts server/tests/socket.test.ts && tsx --tsconfig tsconfig.app.json --test tests/online-ui.test.ts",
+    "test:online": "tsx --test server/tests/game.test.ts server/tests/gostop.test.ts server/tests/socket.test.ts server/tests/reconnect.test.ts && tsx --tsconfig tsconfig.app.json --test tests/online-ui.test.ts tests/reconnect-session.test.ts",
+    "test:browser-reconnect": "node --import tsx tests/browser-reconnect.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

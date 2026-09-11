@@ -12,10 +12,10 @@
 
 | 상태 | 내용 |
 | --- | --- |
-| Room | code, mode, members(Socket.IO ID 배열), match |
+| Room | code, mode, members(고정 좌석별 현재 소켓·토큰 해시·복구 기한), match |
 | Match | mode, revision, turn, phase, players, floor, pile, pending, revealed, events, ppeokStacks, result |
 | 비공개 Player | hand, captured, goCount, lastGoScore, bombCount, bombPassCount, shakeMonths |
-| RoomView | code, mode, capacity, you, occupancy, game |
+| RoomView | code, mode, capacity, you, occupancy, connections, game |
 | GameView | 자기 hand, 공개 players(장수·획득패·점수·GO·폭탄·흔들기 기록), floor, drawCount, turn, phase, revision, 공개 이벤트와 결과 |
 
 `Seat`와 뻑 소유자 `owner`는 절대 좌석 `0 | 1 | 2`다. UI의 상대 1은 `(you + 1) % 3`, 상대 2는 `(you + 2) % 3`으로 표시한다. 뻑 소유자와 정산 부담자도 같은 기준으로 이름을 변환한다.
@@ -24,11 +24,11 @@
 
 ## 이벤트
 
-추가 이벤트는 **`room:create-mode(mode, ack)`** 하나다. mode는 `matgo` 또는 `gostop`이며 런타임에서 검증한다. 기존 **`room:create(ack)`**는 2인 맞고 생성으로 유지한다.
+3인 확장에서 추가된 이벤트는 **`room:create-mode(mode, ack)`**다. mode는 `matgo` 또는 `gostop`이며 런타임에서 검증한다. 기존 **`room:create(ack)`**는 2인 맞고 생성으로 유지한다. 이후 추가된 `room:session`, `room:resume`은 [재접속 문서](./online-reconnect.md)를 참고한다.
 
 `room:join`, `room:leave`, `room:sync`, `game:action`, `room:state`, `room:closed`는 공통으로 사용한다. `game:action`의 행동은 기존과 같은 `play / choose / bomb / shake / bomb-pass / go / stop`이다. 정원, 턴, 카드 소유권, 단계, revision은 서버가 검증하며 클라이언트가 모드·좌석·점수를 행동 요청에 끼워 넣으면 거부한다.
 
-3인 방은 1명 또는 2명일 때 `game: null`이다. 세 번째 플레이어가 참가할 때만 서버가 분배한다. 네 번째 참가자는 거부한다. 어떤 참가자든 연결이 끊기거나 나가면 방을 닫고 나머지 모두에게 알린다.
+3인 방은 1명 또는 2명일 때 `game: null`이다. 세 번째 플레이어가 참가할 때만 서버가 분배한다. 네 번째 참가자는 거부한다. 연결이 끊기면 60초 동안 같은 좌석 복구를 기다린다. 유예가 만료되거나 명시적으로 나가면 방을 닫고 나머지 모두에게 알린다.
 
 ## 3인 규칙과 정산
 
@@ -58,7 +58,7 @@ npm run build
 
 `server/tests/gostop.test.ts`는 3인 분배·손패 비공개·턴 순서·잘못된 요청·특수 이벤트·각 상대 피 이동·폭탄/흔들기·3점 GO/STOP·고박 정산과 40판 카드 보존을 검증한다. `socket.test.ts`는 실제 연결 3개로 대기/시작/정원/방 격리/비공개 상태/동기화/종료를 검증하며, 두 모드의 Vite polling/WebSocket 경로도 검사한다. UI 테스트는 세 좌석의 상대 배치, 뻑 이름, 각 패널, 선택창 권한, 정산 표시를 검사한다. 기존 2인 온라인 및 싱글플레이 규칙 테스트도 함께 실행한다.
 
-로그인, 영속 저장, 재접속 복구, 관전, 재대결은 기존 MVP와 같이 포함하지 않는다.
+로그인, 영속 저장, 관전, 재대결은 포함하지 않는다. 서버 프로세스가 살아 있는 동안의 새로고침/재접속 복구는 지원한다.
 
 ## 이번 작업의 검증 결과
 

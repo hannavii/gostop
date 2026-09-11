@@ -5,6 +5,7 @@ import "./App.css";
 import MatgoGame from "./MatgoGame";
 import GostopGame from "./GostopGame";
 import OnlineMatgo from "./online/OnlineMatgo";
+import { readReconnectSession } from "./online/reconnectSession";
 
 import {
   GAME_RULES,
@@ -13,7 +14,7 @@ import {
 
 function App() {
   const [selectedMode, setSelectedMode] =
-    useState<GameMode | "online" | null>(null);
+    useState<GameMode | "online" | null>(() => readReconnectSession() ? "online" : null);
 
   /* =========================
      게임 선택 화면

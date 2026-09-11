@@ -94,7 +94,7 @@ test("real Socket.IO clients: rooms, privacy, validation, full round, isolation 
   assert.equal(views[0]!.game!.phase, "finished");
   assert.deepEqual(views[0]!.game!.result, views[1]!.game!.result);
 
-  b.disconnect();
+  assert.equal((await b.timeout(2000).emitWithAck("room:leave")).ok, true);
   await until(() => Boolean(closed[0]));
   assert.equal((await a.timeout(2000).emitWithAck("game:action", move)).ok, false);
   assert.equal((await d.timeout(2000).emitWithAck("room:join", code)).ok, false);
@@ -232,7 +232,7 @@ test("three real clients: waiting, capacity, privacy, invalid actions, full roun
   const beforeSync = structuredClone(views.slice(0, 3));
   assert.equal((await c.timeout(2000).emitWithAck("room:sync")).ok, true);
   assert.deepEqual(views.slice(0, 3), beforeSync);
-  c.disconnect();
+  assert.equal((await c.timeout(2000).emitWithAck("room:leave")).ok, true);
   await until(() => Boolean(closed[0] && closed[1]));
   assert.equal((await a.timeout(2000).emitWithAck("game:action", move)).ok, false);
   assert.equal((await b.timeout(2000).emitWithAck("room:join", code)).ok, false);

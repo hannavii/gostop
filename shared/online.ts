@@ -13,6 +13,7 @@ export type GameAction = {
 };
 export type Reply = { ok: true } | { ok: false; error: string };
 export type Ack = (reply: Reply) => void;
+export type ReconnectSession = { roomCode: string; token: string };
 
 // Explicit public projection. Never add the server's hands, pile or pending state here.
 export type GameView = {
@@ -33,17 +34,21 @@ export type GameView = {
   result: { winner: Seat | "draw"; settlement: SettlementResult | null;
     gostopSettlement?: GostopSettlementResult } | null;
 };
-export type RoomView = { code: string; mode: GameMode; capacity: number; you: Seat; occupancy: number; game: GameView | null };
+export type RoomView = { code: string; mode: GameMode; capacity: number; you: Seat; occupancy: number;
+  connections: { seat: Seat; connected: boolean; reconnectDeadline: number | null }[];
+  game: GameView | null };
 
 export interface ClientEvents {
   "room:create": (ack: Ack) => void;
   "room:create-mode": (mode: GameMode, ack: Ack) => void;
   "room:join": (code: string, ack: Ack) => void;
+  "room:resume": (session: ReconnectSession, ack: Ack) => void;
   "room:leave": (ack: Ack) => void;
   "room:sync": (ack: Ack) => void;
   "game:action": (action: GameAction, ack: Ack) => void;
 }
 export interface ServerEvents {
+  "room:session": (session: ReconnectSession) => void;
   "room:state": (view: RoomView) => void;
   "room:closed": (reason: string) => void;
 }

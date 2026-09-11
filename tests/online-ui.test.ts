@@ -23,7 +23,8 @@ function fixture(): GameView {
 }
 function board(game: GameView, you: Seat = 0) {
   return renderToStaticMarkup(createElement(OnlineGameBoard, {
-    game, room: { code: "ABC123", mode: game.mode, capacity: game.players.length, you, occupancy: game.players.length, game }, enabled: true,
+    game, room: { code: "ABC123", mode: game.mode, capacity: game.players.length, you, occupancy: game.players.length,
+      connections: game.players.map(p => ({ seat: p.seat, connected: true, reconnectDeadline: null })), game }, enabled: true,
     message: "", act() {}, onSync() {}, onLeave() {},
   }));
 }
