@@ -5,14 +5,15 @@ import { calculateScore } from "../src/game/scoring";
 import { calculateSettlement } from "../src/game/settlement";
 import {
   applyPansseul, finalizePreparedPlay, prepareHandPlay, resolveDrawChoice,
-  resolveTurnDraw, stealPiCards,
+  resolveTurnDraw, resolveDrawOnly, stealPiCards, getBombActionForMonth, canShakeMonth,
   type DrawChoiceState, type DrawResult, type PpeokStack,
   type PreparedPlay, type SpecialEvent, type TurnCompleteResult,
 } from "../src/game/turn";
 import type { HwatuCard } from "../src/types/game";
 import type { GameAction, GameView, Seat } from "../shared/online";
 
-type Player = { hand: HwatuCard[]; captured: HwatuCard[]; goCount: number; lastGoScore: number };
+type Player = { hand: HwatuCard[]; captured: HwatuCard[]; goCount: number; lastGoScore: number;
+  bombCount: number; bombPassCount: number; shakeMonths: number[] };
 type Pending = { kind: "hand"; card: HwatuCard; matches: HwatuCard[] }
   | { kind: "draw"; choice: DrawChoiceState };
 export type Match = {
@@ -33,7 +34,8 @@ const other = (seat: Seat): Seat => seat === 0 ? 1 : 0;
 
 export function createMatch(): Match {
   const dealt = dealCards(hwatuCards);
-  const player = (hand: HwatuCard[]): Player => ({ hand, captured: [], goCount: 0, lastGoScore: 0 });
+  const player = (hand: HwatuCard[]): Player => ({ hand, captured: [], goCount: 0, lastGoScore: 0,
+    bombCount: 0, bombPassCount: 0, shakeMonths: [] });
   return {
     revision: 0, turn: 0, phase: "play",
     players: [player(dealt.playerCards), player(dealt.opponentCards)],
@@ -43,7 +45,7 @@ export function createMatch(): Match {
 }
 
 function advance(match: Match) {
-  if (match.pile.length === 0 && match.players.every(p => p.hand.length === 0)) {
+  if (match.pile.length === 0 && match.players.every(p => p.hand.length + p.bombPassCount === 0)) {
     match.phase = "finished";
     match.result = { winner: "draw", settlement: null };
   } else {
@@ -55,13 +57,13 @@ function advance(match: Match) {
 function complete(match: Match, raw: TurnCompleteResult) {
   const player = match.players[match.turn];
   const opponent = match.players[other(match.turn)];
-  const result = applyPansseul(raw, player.hand.length);
+  const result = applyPansseul(raw, player.hand.length + player.bombPassCount);
   const stolen = stealPiCards(opponent.captured, result.stealPi);
   player.captured.push(...result.capturedCards, ...stolen.stolenCards);
   opponent.captured = stolen.remainingCards;
   match.floor = result.floorCards;
   match.ppeokStacks = result.ppeokStacks;
-  match.events = result.specialEvents;
+  match.events = [...new Set([...match.events, ...result.specialEvents])];
   match.pending = null;
   const score = calculateScore(player.captured).total;
   if (score >= GAME_RULES.matgo.goStopScore && score > player.lastGoScore) {
@@ -91,6 +93,18 @@ function draw(match: Match, prepared: PreparedPlay) {
   acceptDraw(match, resolveTurnDraw(prepared, drawn));
 }
 
+function drawOnly(match: Match, capturedCards: HwatuCard[] = [], stealPi = 0) {
+  const drawn = match.pile.shift();
+  if (drawn) {
+    match.revealed.push(drawn);
+    acceptDraw(match, resolveDrawOnly(drawn, match.floor, side(match.turn), match.ppeokStacks,
+      capturedCards, stealPi, match.events));
+  } else {
+    complete(match, { type: "complete", floorCards: match.floor, capturedCards, stealPi,
+      specialEvents: match.events, ppeokStacks: match.ppeokStacks });
+  }
+}
+
 // Runtime validation is required even when a client uses the shared TS types.
 export function parseAction(input: unknown): GameAction {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("잘못된 행동 요청입니다.");
@@ -98,10 +112,10 @@ export function parseAction(input: unknown): GameAction {
   if (Object.keys(a).some(key => !["roomCode", "revision", "type", "cardId"].includes(key)) ||
     typeof a.roomCode !== "string" || !/^[A-Z0-9]{6}$/.test(a.roomCode) ||
     !Number.isSafeInteger(a.revision) || (a.revision as number) < 0 ||
-    !["play", "choose", "go", "stop"].includes(a.type as string)) {
+    !["play", "bomb", "shake", "bomb-pass", "choose", "go", "stop"].includes(a.type as string)) {
     throw new Error("잘못된 행동 요청입니다.");
   }
-  if (a.type === "play" || a.type === "choose") {
+  if (a.type === "play" || a.type === "choose" || a.type === "bomb" || a.type === "shake") {
     if (typeof a.cardId !== "string" || a.cardId.length === 0 || a.cardId.length > 64) {
       throw new Error("카드 ID가 필요합니다.");
     }
@@ -113,20 +127,46 @@ export function parseAction(input: unknown): GameAction {
 
 // Synchronous, atomic transition: invalid actions cannot partially mutate the match.
 export function applyAction(current: Match, seat: Seat, action: GameAction): Match {
+  parseAction(action);
   if (action.revision !== current.revision) throw new Error("지난 게임 상태의 요청입니다. 다시 선택해주세요.");
   if (current.phase === "finished") throw new Error("이미 종료된 게임입니다.");
   if (seat !== current.turn) throw new Error("상대방 차례입니다.");
   const match = structuredClone(current);
   const player = match.players[seat];
 
-  if (action.type === "play") {
+  if (action.type === "bomb-pass") {
+    if (match.phase !== "play" || player.bombPassCount <= 0) throw new Error("사용 가능한 폭탄 패스가 없습니다.");
+    player.bombPassCount--;
+    match.revealed = [];
+    match.events = ["bomb-pass"];
+    drawOnly(match);
+  } else if (action.type === "play" || action.type === "bomb" || action.type === "shake") {
     if (match.phase !== "play") throw new Error("먼저 패 선택 또는 GO/STOP을 완료해주세요.");
     const card = player.hand.find(c => c.id === action.cardId);
     if (!card) throw new Error("자신의 손패에 없는 카드입니다.");
+    if (action.type === "bomb") {
+      const bomb = getBombActionForMonth(player.hand, match.floor, card.month);
+      if (!bomb) throw new Error("폭탄을 사용할 수 없습니다.");
+      player.hand = player.hand.filter(c => c.month !== card.month);
+      match.floor = match.floor.filter(c => c.id !== bomb.floorCard.id);
+      player.bombCount++;
+      player.bombPassCount += 2;
+      match.revealed = bomb.handCards;
+      match.events = ["bomb"];
+      drawOnly(match, [...bomb.handCards, bomb.floorCard], 1);
+      match.revision++;
+      return match;
+    }
+    if (action.type === "shake") {
+      if (player.shakeMonths.includes(card.month) || !canShakeMonth(player.hand, match.floor, card.month)) {
+        throw new Error("흔들기를 선언할 수 없습니다.");
+      }
+      player.shakeMonths.push(card.month);
+    }
     const prepared = prepareHandPlay(card, match.floor, side(seat), match.ppeokStacks);
     player.hand = player.hand.filter(c => c.id !== card.id);
     match.revealed = [card];
-    match.events = [];
+    match.events = action.type === "shake" ? ["shake"] : [];
     if (prepared.type === "choice") {
       match.pending = { kind: "hand", card, matches: prepared.matchingCards };
       match.phase = "choose";
@@ -152,7 +192,8 @@ export function applyAction(current: Match, seat: Seat, action: GameAction): Mat
       const opponent = match.players[other(seat)];
       match.result = {
         winner: seat,
-        settlement: calculateSettlement(player.captured, opponent.captured, player.goCount, opponent.goCount),
+        settlement: calculateSettlement(player.captured, opponent.captured, player.goCount, opponent.goCount,
+          player.shakeMonths.length, player.bombCount),
       };
       match.phase = "finished";
     } else {
@@ -173,7 +214,17 @@ export function gameView(match: Match, seat: Seat): GameView {
     players: match.players.map((p, i) => ({
       seat: i as Seat, handCount: p.hand.length, captured: p.captured,
       score: calculateScore(p.captured).total, goCount: p.goCount,
+      bombCount: p.bombCount, bombPassCount: p.bombPassCount, shakeMonths: p.shakeMonths,
     })),
+    specialOptions: seat === match.turn && match.phase === "play" ? match.players[seat].hand.flatMap<GameView["specialOptions"][number]>(card => {
+      if (getBombActionForMonth(match.players[seat].hand, match.floor, card.month)) {
+        return [{ cardId: card.id, type: "bomb" as const }];
+      }
+      if (!match.players[seat].shakeMonths.includes(card.month) && canShakeMonth(match.players[seat].hand, match.floor, card.month)) {
+        return [{ cardId: card.id, type: "shake" as const }];
+      }
+      return [];
+    }) : [],
     floor: match.floor, drawCount: match.pile.length,
     choice: seat === match.turn && pending
       ? pending.kind === "hand" ? pending.matches : pending.choice.matchingCards : null,

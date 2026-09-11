@@ -62,7 +62,7 @@ test("real Socket.IO clients: rooms, privacy, validation, full round, isolation 
 
   function checkViews() {
     const x = views[0]!.game!, y = views[1]!.game!;
-    assert.deepEqual({ ...x, hand: null, choice: null }, { ...y, hand: null, choice: null });
+    assert.deepEqual({ ...x, hand: null, choice: null, specialOptions: null }, { ...y, hand: null, choice: null, specialOptions: null });
     assert.equal(x.hand.length, x.players[0].handCount);
     assert.equal(y.hand.length, y.players[1].handCount);
     for (const [own, opponent] of [[x, y], [y, x]]) {

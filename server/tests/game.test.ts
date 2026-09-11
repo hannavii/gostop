@@ -11,6 +11,117 @@ const action = (match: Match, type: GameAction["type"], cardId?: string): GameAc
   roomCode: "ABC123", revision: match.revision, type, ...(cardId ? { cardId } : {}),
 });
 
+function specialMatch(bomb = true) {
+  const match = createMatch();
+  match.players[0].hand = [card(1, 1), card(1, 2), card(1, 3)];
+  match.players[1].hand = [card(5, 1), card(6, 1), card(7, 1)];
+  match.players[1].captured = [card(8, 1), card(8, 2), card(9, 1)];
+  match.floor = bomb ? [card(1, 4), card(2, 1)] : [card(2, 1)];
+  match.pile = [card(2, 2), card(3, 1), card(3, 2), card(4, 1), card(4, 2), card(10, 1)];
+  return match;
+}
+
+test("server offers private bomb/shake options; normal play declines without counters", () => {
+  for (const bomb of [true, false]) {
+    const match = specialMatch(bomb);
+    assert.deepEqual(gameView(match, 0).specialOptions, match.players[0].hand.map(c => ({ cardId: c.id, type: bomb ? "bomb" : "shake" })));
+    assert.deepEqual(gameView(match, 1).specialOptions, []);
+    const next = applyAction(match, 0, action(match, "play", "1-1"));
+    assert.equal(next.players[0].hand.length, 2);
+    assert.equal(next.players[0].bombCount, 0);
+    assert.deepEqual(next.players[0].shakeMonths, []);
+  }
+});
+
+test("bomb captures once, stacks sweep reward, creates two passes and finishes a full round", () => {
+  let match = specialMatch();
+  match = applyAction(match, 0, action(match, "bomb", "1-2"));
+  assert.deepEqual(match.events, ["bomb", "pansseul"]);
+  assert.equal(match.players[0].captured.length, 8);
+  assert.equal(match.players[1].captured.length, 1);
+  assert.equal(match.players[0].bombCount, 1);
+  assert.equal(match.players[0].bombPassCount, 2);
+  assert.equal(match.players[0].hand.length, 0);
+  assert.equal(match.pile.length, 5);
+  for (let i = 0; i < 10 && match.phase !== "finished"; i++) {
+    const p = match.players[match.turn];
+    match = applyAction(match, match.turn, action(match, p.hand.length ? "play" : "bomb-pass", p.hand[0]?.id));
+  }
+  assert.equal(match.phase, "finished");
+  assert.equal(match.players[0].bombPassCount, 0);
+});
+
+test("bomb draw choice preserves captures and reward until completion, no premature sweep", () => {
+  const match = specialMatch();
+  match.floor.push(card(2, 3));
+  const next = applyAction(match, 0, action(match, "bomb", "1-1"));
+  assert.equal(next.phase, "choose");
+  assert.equal(next.players[0].captured.length, 0);
+  assert.deepEqual(gameView(next, 0).specialOptions, []);
+  assert.throws(() => applyAction(next, 0, action(next, "bomb-pass")));
+  const done = applyAction(next, 0, action(next, "choose", "2-1"));
+  assert.deepEqual(done.events, ["bomb"]);
+  assert.equal(done.players[0].captured.length, 7);
+  assert.equal(new Set(done.players[0].captured.map(c => c.id)).size, 7);
+  const miss = specialMatch();
+  miss.pile[0] = card(11, 1);
+  assert.deepEqual(applyAction(miss, 0, action(miss, "bomb", "1-1")).events, ["bomb"]);
+});
+
+test("shake publishes month/count to both seats, preserves jjok and uses settlement multiplier", () => {
+  const match = specialMatch(false);
+  match.floor = [];
+  match.pile[0] = card(1, 4);
+  match.players[0].captured = Array.from({ length: 14 }, (_, i) => card(20 + i, 1));
+  const next = applyAction(match, 0, action(match, "shake", "1-1"));
+  assert.deepEqual(next.events, ["shake", "jjok", "pansseul"]);
+  for (const seat of [0, 1] as const) assert.deepEqual(gameView(next, seat).players[0].shakeMonths, [1]);
+  assert.ok(!JSON.stringify(gameView(next, 1)).includes('"id":"1-2"'));
+  assert.equal(next.phase, "go-stop");
+  next.players[0].bombCount = 1;
+  const stopped = applyAction(next, 0, action(next, "stop"));
+  assert.equal(stopped.result?.settlement?.winnerShakeCount, 1);
+  assert.equal(stopped.result?.settlement?.winnerBombCount, 1);
+  assert.equal(stopped.result?.settlement?.multipliers.find(m => m.id === "shake-bomb")?.multiplier, 4);
+});
+
+test("special action validation rejects forged conditions, phase, replay and counters atomically", () => {
+  const match = specialMatch();
+  const before = structuredClone(match);
+  for (const move of [action(match, "shake", "1-1"), action(match, "bomb", "5-1"), action(match, "bomb-pass")]) {
+    assert.throws(() => applyAction(match, 0, move));
+  }
+  assert.throws(() => applyAction(match, 1, action(match, "bomb", "1-1")));
+  assert.deepEqual(match, before);
+  for (const type of ["bomb", "shake"] as const) assert.throws(() => parseAction(action(match, type)));
+  assert.throws(() => parseAction(action(match, "bomb-pass", "1-1")));
+  assert.throws(() => parseAction({ ...action(match, "bomb", "1-1"), bombPassCount: 99 }));
+  const move = action(match, "bomb", "1-1");
+  const next = applyAction(match, 0, move);
+  assert.throws(() => applyAction(next, 0, move));
+  const shake = specialMatch(false);
+  shake.players[0].shakeMonths = [1];
+  assert.deepEqual(gameView(shake, 0).specialOptions, []);
+  assert.throws(() => applyAction(shake, 0, action(shake, "shake", "1-1")));
+});
+
+test("passes may precede hand play and preserve ppeok capture and last-action sweep rules", () => {
+  for (const remaining of [0, 1]) {
+    const match = specialMatch(false);
+    match.players[0].hand = remaining ? [card(10, 2)] : [];
+    match.players[0].bombPassCount = 1;
+    match.floor = [card(3, 1), card(3, 2), card(3, 3)];
+    match.pile = [card(3, 4), card(11, 1)];
+    match.ppeokStacks = [{ month: 3, owner: "player" }];
+    const next = applyAction(match, 0, action(match, "bomb-pass"));
+    assert.equal(next.players[0].hand.length, remaining);
+    assert.equal(next.players[0].bombPassCount, 0);
+    assert.deepEqual(next.events, ["bomb-pass", "self-ppeok-capture", "pansseul"]);
+    assert.equal(next.players[1].captured.length, remaining ? 0 : 1);
+    assert.deepEqual(next.ppeokStacks, []);
+  }
+});
+
 test("server distributes 48 unique cards and exposes only the viewer's hand", () => {
   const match = createMatch();
   assert.deepEqual(match.players.map(p => p.hand.length), [10, 10]);
@@ -26,6 +137,27 @@ test("server distributes 48 unique cards and exposes only the viewer's hand", ()
     }
     view.hand.pop();
     assert.equal(match.players[seat].hand.length, 10);
+  }
+});
+
+test("special-action rounds conserve all 48 cards and consume exactly one draw per turn", () => {
+  for (let round = 0; round < 50; round++) {
+    let match = createMatch();
+    for (let step = 0; step < 100 && match.phase !== "finished"; step++) {
+      const view = gameView(match, match.turn);
+      const option = view.specialOptions[0];
+      const type = match.phase === "choose" ? "choose" : match.phase === "go-stop" ? "go"
+        : option ? option.type : match.players[match.turn].bombPassCount ? "bomb-pass" : "play";
+      const cardId = type === "choose" ? view.choice![0].id : type === "play" ? view.hand[0].id : option?.cardId;
+      const beforeDraw = match.pile.length;
+      match = applyAction(match, match.turn, action(match, type, type === "go" || type === "bomb-pass" ? undefined : cardId));
+      assert.ok(beforeDraw - match.pile.length <= 1);
+      if (match.pending) continue;
+      const cards = [...match.players.flatMap(p => [...p.hand, ...p.captured]), ...match.floor, ...match.pile];
+      assert.equal(cards.length, 48);
+      assert.equal(new Set(cards.map(c => c.id)).size, 48);
+    }
+    assert.equal(match.phase, "finished");
   }
 });
 

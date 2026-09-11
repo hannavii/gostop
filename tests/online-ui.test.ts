@@ -12,11 +12,11 @@ function fixture(): GameView {
   return {
     revision: 1, turn: 0, phase: "play", hand: hwatuCards.slice(0, 2),
     players: [
-      { seat: 0, handCount: 2, captured: [], score: 17, goCount: 2 },
-      { seat: 1, handCount: 7, captured: [], score: 19, goCount: 3 },
+      { seat: 0, handCount: 2, captured: [], score: 17, goCount: 2, bombCount: 1, bombPassCount: 2, shakeMonths: [1] },
+      { seat: 1, handCount: 7, captured: [], score: 19, goCount: 3, bombCount: 0, bombPassCount: 0, shakeMonths: [] },
     ],
     floor: hwatuCards.slice(4, 7), drawCount: 10, choice: null,
-    revealed: [], specialEvents: [], ppeokStacks: [], result: null,
+    revealed: [], specialEvents: [], ppeokStacks: [], result: null, specialOptions: [],
   };
 }
 function board(game: GameView, you: Seat = 0) {
@@ -49,6 +49,18 @@ test("floor choices and GO/STOP are shown only to the acting seat", () => {
   game.choice = null;
   assert.match(board(game), /go-stop-modal/);
   assert.ok(!board(game, 1).includes('go-stop-modal'));
+});
+
+test("server shake records and bomb passes render for both seats with action only on own turn", () => {
+  const game = fixture();
+  assert.match(board(game), /폭탄 패 사용 · 더미만 뒤집기 \(2\)/);
+  assert.ok(!board(game, 1).includes('bomb-pass-button'));
+  for (const seat of [0, 1] as const) {
+    assert.match(board(game, seat), /흔들기 공개/);
+    assert.match(board(game, seat), /1월/);
+  }
+  game.phase = "choose";
+  assert.ok(!board(game).includes('bomb-pass-button'));
 });
 test("online captured modal uses server score without recalculating empty captured cards", () => {
   const html = renderToStaticMarkup(createElement(CapturedCardsModal, {

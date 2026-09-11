@@ -39,7 +39,8 @@ function usePresentation(game: GameView, you: Seat) {
     const newCards = game.revealed.filter(card => !before.revealed.some(old => old.id === card.id));
     let delay = 0;
     for (const card of newCards) {
-      const isDraw = game.revealed.indexOf(card) > 0;
+      const isDraw = game.specialEvents.includes("bomb-pass") ||
+        game.revealed.indexOf(card) >= (game.specialEvents.includes("bomb") ? 3 : 1);
       const kind = `${side}-${isDraw ? "draw" : "play"}`;
       const faceDown = isDraw || side === "opponent";
       schedule({ card, kind, faceUp: !faceDown }, delay);
@@ -68,6 +69,8 @@ function usePresentation(game: GameView, you: Seat) {
 
 export default function OnlineGameBoard({ room, game, enabled, message, act, onSync, onLeave }: Props) {
   const [detail, setDetail] = useState<Seat | null>(null);
+  const [prompt, setPrompt] = useState<{ revision: number; cardId: string; type: "bomb" | "shake" } | null>(null);
+  const specialPrompt = prompt?.revision === game.revision && game.phase === "play" && game.turn === room.you ? prompt : null;
   const [expandedPpeokMonth, setExpandedPpeokMonth] = useState<number | null>(null);
   const visual = usePresentation(game, room.you);
   const mine = game.players[room.you];
@@ -101,18 +104,19 @@ export default function OnlineGameBoard({ room, game, enabled, message, act, onS
       {visual.captured.cards.map((card, index) => <div key={card.id} className="capture-flight-card" style={{ left: index * 10, top: index * 4 }}><Card card={card} /></div>)}
     </div></div>}
     {selected && <CapturedCardsModal title={detail === room.you ? "내 먹은 패" : "상대 먹은 패"}
-      cards={selected.captured} totalScore={selected.score} goCount={selected.goCount} onClose={() => setDetail(null)} />}
+      cards={selected.captured} totalScore={selected.score} goCount={selected.goCount}
+      shakeMonths={selected.shakeMonths} bombCount={selected.bombCount} onClose={() => setDetail(null)} />}
     {[opponent, mine].map(player => <CapturedPanel key={player.seat}
       title={player.seat === room.you ? "내 먹은 패" : "상대 먹은 패"}
       side={player.seat === room.you ? "right" : "left"} cards={player.captured}
-      score={{ total: player.score }} goCount={player.goCount} shakeCount={0} shakeMonths={[]} bombCount={0}
+      score={{ total: player.score }} goCount={player.goCount} shakeCount={player.shakeMonths.length} shakeMonths={player.shakeMonths} bombCount={player.bombCount}
       onOpenDetails={() => setDetail(player.seat)} />)}
     <section className="opponent-area">
       <h2>상대방{!myTurn && !finished && " ◀"}</h2>
       <div className="card-row" aria-label="상대 손패">
         {Array.from({ length: opponent.handCount }, (_, i) => <Card key={i} isBack />)}
       </div>
-      <p>손패 {opponent.handCount}장 · 점수 {opponent.score}점 · GO {opponent.goCount}회</p>
+      <p>손패 {opponent.handCount}장 · 점수 {opponent.score}점 · GO {opponent.goCount}회 · 폭탄패 {opponent.bombPassCount}장</p>
     </section>
     <MatgoTable floorCards={game.floor} ppeokStacks={game.ppeokStacks.map(stack => ({ ...stack,
       owner: (stack.owner === "player" ? 0 : 1) === room.you ? "player" : "opponent" }))}
@@ -123,9 +127,24 @@ export default function OnlineGameBoard({ room, game, enabled, message, act, onS
     <section className="player-area">
       <h2>내 패{myTurn && !finished && " ◀"}</h2>
       <div className="card-row" aria-label="내 손패">{game.hand.map(card => <Card key={card.id} card={card}
-        onClick={canAct && myTurn && game.phase === "play" ? () => act("play", card.id) : undefined} />)}</div>
+        onClick={canAct && myTurn && game.phase === "play" && !specialPrompt ? () => {
+          const option = game.specialOptions.find(option => option.cardId === card.id);
+          if (option) setPrompt({ ...option, revision: game.revision });
+          else act("play", card.id);
+        } : undefined} />)}</div>
+      {myTurn && game.phase === "play" && mine.bombPassCount > 0 && <button className="bomb-pass-button"
+        disabled={!canAct || !!specialPrompt} onClick={() => act("bomb-pass")}>폭탄 패 사용 · 더미만 뒤집기 ({mine.bombPassCount})</button>}
       <p>손패 {game.hand.length}장 · 점수 {mine.score}점 · GO {mine.goCount}회</p>
     </section>
+    {specialPrompt && <div className="go-stop-overlay"><div className="go-stop-modal" role="dialog" aria-label="특수 행동 선택">
+      <h2>{specialPrompt.type === "bomb" ? "폭탄 가능!" : "흔들기 가능!"}</h2>
+      <p>{game.hand.find(card => card.id === specialPrompt.cardId)?.month}월 패를 어떻게 내시겠습니까?</p>
+      <div className="go-stop-buttons">
+        <button disabled={!canAct} onClick={() => act(specialPrompt.type, specialPrompt.cardId)}>{specialPrompt.type === "bomb" ? "폭탄 사용" : "흔들기"}</button>
+        <button disabled={!canAct} onClick={() => act("play", specialPrompt.cardId)}>그냥 한 장 내기</button>
+        <button disabled={!canAct} onClick={() => setPrompt(null)}>취소</button>
+      </div>{message && <p role="alert">{message}</p>}
+    </div></div>}
     {myTurn && game.phase === "go-stop" && !animating && <div className="go-stop-overlay"><div className="go-stop-modal">
       <div className="go-stop-small">현재 점수</div><div className="go-stop-score">{mine.score}점</div>
       <p>GO 하시겠습니까, STOP 하시겠습니까?</p><div className="go-stop-buttons">

@@ -6,7 +6,7 @@ export type Seat = 0 | 1;
 export type GameAction = {
   roomCode: string;
   revision: number;
-  type: "play" | "choose" | "go" | "stop";
+  type: "play" | "bomb" | "shake" | "bomb-pass" | "choose" | "go" | "stop";
   cardId?: string;
 };
 export type Reply = { ok: true } | { ok: false; error: string };
@@ -18,7 +18,9 @@ export type GameView = {
   turn: Seat;
   phase: "play" | "choose" | "go-stop" | "finished";
   hand: HwatuCard[];
-  players: { seat: Seat; handCount: number; captured: HwatuCard[]; score: number; goCount: number }[];
+  players: { seat: Seat; handCount: number; captured: HwatuCard[]; score: number; goCount: number;
+    bombCount: number; bombPassCount: number; shakeMonths: number[] }[];
+  specialOptions: { cardId: string; type: "bomb" | "shake" }[];
   floor: HwatuCard[];
   drawCount: number;
   choice: HwatuCard[] | null;
