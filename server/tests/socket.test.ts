@@ -5,9 +5,64 @@ import { setTimeout as delay } from "node:timers/promises";
 import { io, type Socket } from "socket.io-client";
 import type { AddressInfo } from "node:net";
 import { createOnlineServer } from "../app";
+import { createMatch } from "../game";
+import { hwatuCards } from "../../src/data/cards";
 import type { ClientEvents, GameAction, GameView, RoomView, Seat, ServerEvents } from "../../shared/online";
 
 type Client = Socket<ServerEvents, ClientEvents>;
+
+test("Matgo special actions synchronize public counters, hide offers and reject duplicate socket requests", { timeout: 15000 }, async t => {
+  for (const type of ["bomb", "shake"] as const) {
+    const server = createOnlineServer({ matchFactory: () => {
+      const m = createMatch();
+      const month = hwatuCards.filter(c => c.month === 1);
+      m.players[0].hand = month.slice(0, 3);
+      m.players[1].hand = hwatuCards.filter(c => c.month === 5).slice(0, 3);
+      m.floor = type === "bomb" ? [month[3]] : [];
+      m.pile = hwatuCards.filter(c => c.month === 2);
+      return m;
+    } });
+    server.http.listen(0, "127.0.0.1");
+    await once(server.http, "listening");
+    const clients: Client[] = [];
+    const views: RoomView[] = [];
+    t.after(async () => {
+      clients.forEach(c => c.disconnect());
+      await new Promise<void>(resolve => server.io.close(() => resolve()));
+    });
+    for (let i = 0; i < 2; i++) {
+      const c: Client = io(`http://127.0.0.1:${(server.http.address() as AddressInfo).port}`, { transports: ["websocket"], forceNew: true });
+      clients.push(c);
+      c.on("room:state", view => { views[i] = view; });
+      await new Promise<void>((resolve, reject) => {
+        c.once("connect", resolve);
+        c.once("connect_error", reject);
+      });
+    }
+    const [a, b] = clients;
+    assert.equal((await a.timeout(2000).emitWithAck("room:create", "Host")).ok, true);
+    const code = views[0].code;
+    assert.equal((await b.timeout(2000).emitWithAck("room:join", code, "Guest")).ok, true);
+    for (const c of clients) await c.timeout(2000).emitWithAck("room:ready", true);
+    await a.timeout(2000).emitWithAck("room:start");
+    await until(() => !!views[1]?.game);
+    const g = views[0].game!;
+    assert.equal(g.specialOptions[0].type, type);
+    assert.deepEqual(views[1].game!.specialOptions, []);
+    const move: GameAction = { roomCode: code, revision: g.revision, type, cardId: g.hand[0].id };
+    assert.equal((await b.timeout(2000).emitWithAck("game:action", move)).ok, false);
+    const replies = await Promise.all([a.timeout(2000).emitWithAck("game:action", move), a.timeout(2000).emitWithAck("game:action", move)]);
+    assert.equal(replies.filter(reply => reply.ok).length, 1);
+    await until(() => views.every(v => v.game?.revision === 1));
+    assert.deepEqual(views[0].game!.players, views[1].game!.players);
+    const player = views[1].game!.players[0];
+    assert.equal(player.bombCount, type === "bomb" ? 1 : 0);
+    assert.equal(player.bombPassCount, type === "bomb" ? 2 : 0);
+    assert.deepEqual(player.shakeMonths, type === "shake" ? [1] : []);
+    for (const card of views[0].game!.hand) assert.ok(!JSON.stringify(views[1]).includes(`"id":"${card.id}"`));
+    clients.forEach(c => c.disconnect());
+  }
+});
 async function until(check: () => boolean) {
   const deadline = Date.now() + 3000;
   while (!check()) {
@@ -64,7 +119,7 @@ test("real Socket.IO clients: rooms, privacy, validation, full round, isolation 
 
   function checkViews() {
     const x = views[0]!.game!, y = views[1]!.game!;
-    assert.deepEqual({ ...x, hand: null, choice: null, specialOptions: null }, { ...y, hand: null, choice: null, specialOptions: null });
+    assert.deepEqual({ ...x, hand: null, choice: null, specialOptions: null, canPlayHand: null }, { ...y, hand: null, choice: null, specialOptions: null, canPlayHand: null });
     assert.equal(x.hand.length, x.players[0].handCount);
     assert.equal(y.hand.length, y.players[1].handCount);
     for (const [own, opponent] of [[x, y], [y, x]]) {
@@ -194,7 +249,7 @@ test("three real clients: waiting, capacity, privacy, invalid actions, full roun
   const isolated = structuredClone(views[3]);
   function checkViews() {
     const games = views.slice(0, 3).map(v => v!.game!);
-    const publicState = (g: GameView) => ({ ...g, hand: null, choice: null, specialOptions: null });
+    const publicState = (g: GameView) => ({ ...g, hand: null, choice: null, specialOptions: null, canPlayHand: null });
     for (let viewer = 0; viewer < 3; viewer++) {
       const own = games[viewer];
       assert.deepEqual(publicState(own), publicState(games[0]));

@@ -46,6 +46,13 @@ export function createMatch(mode: GameMode = "matgo"): Match {
   };
 }
 
+// Match the single-player Matgo flow: spend outstanding bomb passes before
+// playing another hand card. Keep the existing three-player policy unchanged.
+function canPlayHand(match: Match, seat: Seat) {
+  return seat === match.turn && match.phase === "play" &&
+    (match.mode !== "matgo" || match.players[seat].bombPassCount === 0);
+}
+
 function advance(match: Match) {
   if (match.pile.length === 0 && match.players.every(p => p.hand.length + p.bombPassCount === 0)) {
     match.phase = "finished";
@@ -149,6 +156,7 @@ export function applyAction(current: Match, seat: Seat, action: GameAction): Mat
     drawOnly(match);
   } else if (action.type === "play" || action.type === "bomb" || action.type === "shake") {
     if (match.phase !== "play") throw new Error("먼저 패 선택 또는 GO/STOP을 완료해주세요.");
+    if (!canPlayHand(match, seat)) throw new Error("남은 폭탄 패스를 먼저 사용해주세요.");
     const card = player.hand.find(c => c.id === action.cardId);
     if (!card) throw new Error("자신의 손패에 없는 카드입니다.");
     if (action.type === "bomb") {
@@ -226,12 +234,13 @@ export function gameView(match: Match, seat: Seat): GameView {
   return structuredClone({
     mode: match.mode, revision: match.revision, turn: match.turn, phase: match.phase,
     hand: match.players[seat].hand,
+    canPlayHand: canPlayHand(match, seat),
     players: match.players.map((p, i) => ({
       seat: i as Seat, handCount: p.hand.length, captured: p.captured,
       score: calculateScore(p.captured).total, goCount: p.goCount,
       bombCount: p.bombCount, bombPassCount: p.bombPassCount, shakeMonths: p.shakeMonths,
     })),
-    specialOptions: seat === match.turn && match.phase === "play" ? match.players[seat].hand.flatMap<GameView["specialOptions"][number]>(card => {
+    specialOptions: canPlayHand(match, seat) ? match.players[seat].hand.flatMap<GameView["specialOptions"][number]>(card => {
       if (engine.getBombActionForMonth(match.players[seat].hand, match.floor, card.month)) {
         return [{ cardId: card.id, type: "bomb" as const }];
       }

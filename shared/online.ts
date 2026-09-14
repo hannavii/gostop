@@ -23,6 +23,8 @@ export type GameView = {
   turn: Seat;
   phase: "play" | "choose" | "go-stop" | "finished";
   hand: HwatuCard[];
+  // Viewer-specific permission, computed by the server (including bomb passes).
+  canPlayHand: boolean;
   players: { seat: Seat; handCount: number; captured: HwatuCard[]; score: number; goCount: number;
     bombCount: number; bombPassCount: number; shakeMonths: number[] }[];
   specialOptions: { cardId: string; type: "bomb" | "shake" }[];

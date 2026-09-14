@@ -12,7 +12,7 @@ import { calculateGostopSettlement } from "../src/game/gostopSettlement";
 
 function fixture(): GameView {
   return {
-    mode: "matgo", revision: 1, turn: 0, phase: "play", hand: hwatuCards.slice(0, 2),
+    mode: "matgo", revision: 1, turn: 0, phase: "play", hand: hwatuCards.slice(0, 2), canPlayHand: false,
     players: [
       { seat: 0, handCount: 2, captured: [], score: 17, goCount: 2, bombCount: 1, bombPassCount: 2, shakeMonths: [1] },
       { seat: 1, handCount: 7, captured: [], score: 19, goCount: 3, bombCount: 0, bombPassCount: 0, shakeMonths: [] },
@@ -80,6 +80,15 @@ test("server shake records and bomb passes render for both seats with action onl
   }
   game.phase = "choose";
   assert.ok(!board(game).includes('bomb-pass-button'));
+});
+
+test("hand buttons obey the server permission instead of local bomb/shake inference", () => {
+  const game = fixture();
+  const hand = () => board(game).split('aria-label="내 손패">')[1].split('</section>')[0];
+  assert.ok(!hand().includes('<button type="button" class="card'));
+  // UI trusts this permission; legality is validated again when the server receives an action.
+  game.canPlayHand = true;
+  assert.match(hand(), /<button type="button" class="card/);
 });
 test("online captured modal uses server score without recalculating empty captured cards", () => {
   const html = renderToStaticMarkup(createElement(CapturedCardsModal, {

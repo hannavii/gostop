@@ -86,8 +86,10 @@ try {
     if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
     return result.result.value;
   };
-  const click = (session, label) => evaluate(session,
-    `[...document.querySelectorAll('button:not(:disabled)')].find(b=>b.textContent===${JSON.stringify(label)})?.click()`);
+  // State publication can reach the host before another client's action ack.
+  // Wait for its button to become enabled instead of silently dropping a click.
+  const click = (session, label) => until(() => evaluate(session,
+    `(() => { const button = [...document.querySelectorAll('button:not(:disabled)')].find(b=>b.textContent===${JSON.stringify(label)}); if (!button) return false; button.click(); return true; })()`), `click ${label}`);
   const ready = session => until(() => evaluate(session, `!!document.querySelector('#online-mode:not(:disabled)')`), 'connected lobby');
   const storage = session => evaluate(session, `JSON.parse(sessionStorage.getItem('gostop.online.reconnect'))`);
 
@@ -131,6 +133,7 @@ try {
     await click(sessions[1], '준비 취소');
     await until(() => evaluate(sessions[0], `document.querySelector('.online-start').disabled`), 'cancel ready synchronized');
     await click(sessions[1], '준비');
+    await until(() => evaluate(sessions[0], `!document.querySelector('.online-start').disabled`), 'ready again synchronized');
     // F5 in lobby retains name, readiness and host, without dealing cards.
     await rpc('Page.reload', { ignoreCache: true }, sessions[0]);
     await until(() => evaluate(sessions[0], `document.querySelector('.online-start')?.disabled === false`), 'lobby F5 readiness recovery');
@@ -182,7 +185,14 @@ try {
     const beforeDrop = sessions.map(session => structuredClone(views.get(session)));
     for (const session of sessions) views.delete(session);
     for (const socket of server.io.sockets.sockets.values()) socket.conn.close();
-    await until(() => sessions.every(s => views.get(s)?.connections.every(c => c.connected)), 'automatic network recovery');
+    await until(async () => {
+      if (sessions.every(s => views.get(s)?.connections.every(c => c.connected))) return true;
+      // Resume can publish over polling before the WebSocket observer attaches.
+      // Ask connected clients for a fresh snapshot, as in the F5 checks above.
+      for (const session of sessions) await evaluate(session,
+        `[...document.querySelectorAll('.online-game-toolbar button:not(:disabled)')].find(b=>b.textContent==='새로고침')?.click()`);
+      return false;
+    }, 'automatic network recovery');
     for (let i = 0; i < count; i++) {
       assert.equal(views.get(sessions[i]).you, i);
       assert.deepEqual(views.get(sessions[i]).game, beforeDrop[i].game);

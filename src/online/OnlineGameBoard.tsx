@@ -40,6 +40,12 @@ function usePresentation(game: GameView, you: Seat) {
     const side = before.turn === you ? "player" : "opponent";
     const newCards = game.revealed.filter(card => !before.revealed.some(old => old.id === card.id));
     let delay = 0;
+    const newShakeMonths = game.players[before.turn].shakeMonths.filter(month =>
+      !before.players[before.turn].shakeMonths.includes(month));
+    for (const month of newShakeMonths) {
+      schedule({ effect: `${side === "player" ? "흔들기!" : "상대방 흔들기!"} ${month}월 ×3 공개` }, delay);
+      delay += GAME_SPEED.shakeReveal;
+    }
     for (const card of newCards) {
       const isDraw = game.specialEvents.includes("bomb-pass") ||
         game.revealed.indexOf(card) >= (game.specialEvents.includes("bomb") ? 3 : 1);
@@ -60,6 +66,7 @@ function usePresentation(game: GameView, you: Seat) {
     // GO/STOP and manual sync retain the last turn's events; don't replay them.
     if (newCards.length || game.phase !== before.phase && before.phase === "choose") {
       for (const event of game.specialEvents) {
+        if (event === "shake") continue; // Public month reveal already displayed above.
         schedule({ effect: getSpecialEventName(event) }, delay);
         delay += GAME_SPEED.specialEffect;
       }
@@ -72,7 +79,8 @@ function usePresentation(game: GameView, you: Seat) {
 export default function OnlineGameBoard({ room, game, enabled, message, act, onSync, onLeave }: Props) {
   const [detail, setDetail] = useState<Seat | null>(null);
   const [prompt, setPrompt] = useState<{ revision: number; cardId: string; type: "bomb" | "shake" } | null>(null);
-  const specialPrompt = prompt?.revision === game.revision && game.phase === "play" && game.turn === room.you ? prompt : null;
+  const specialPrompt = prompt?.revision === game.revision && game.canPlayHand &&
+    game.specialOptions.some(option => option.cardId === prompt.cardId && option.type === prompt.type) ? prompt : null;
   const [expandedPpeokMonth, setExpandedPpeokMonth] = useState<number | null>(null);
   const visual = usePresentation(game, room.you);
   const mine = game.players[room.you];
@@ -89,7 +97,7 @@ export default function OnlineGameBoard({ room, game, enabled, message, act, onS
   const settlement = result?.settlement;
   const turnMessage = message || (finished ? "게임이 끝났습니다." : !myTurn
     ? game.phase === "choose" ? `${name(game.turn)}님이 바닥패를 선택하고 있습니다.` : game.phase === "go-stop" ? `${name(game.turn)}님이 GO / STOP을 선택하고 있습니다.` : `${name(game.turn)}님 차례입니다.`
-    : game.phase === "play" ? "낼 카드를 선택하세요." : "");
+    : game.phase === "play" ? game.canPlayHand ? "낼 카드를 선택하세요." : "남은 폭탄 패스를 사용하세요." : "");
   return <main className={`game ${three ? "gostop3-game online-gostop-game" : "online-matgo-game"} ${animating ? "is-animating" : ""}`} style={GAME_SPEED_STYLE}>
     <nav className="online-game-toolbar" aria-label="방 정보">
       <RoomCode code={room.code} />
@@ -144,7 +152,7 @@ export default function OnlineGameBoard({ room, game, enabled, message, act, onS
       <h2>{room.you === room.host && <span aria-label="방장">👑 </span>}{name(room.you)} (나){myTurn && !finished && " ◀"}</h2>
       <small>{room.connections[room.you].connected ? "접속 중" : "재접속 대기"}</small>
       <div className={`card-row${three ? " gostop3-player-hand" : ""}`} aria-label="내 손패">{game.hand.map(card => <Card key={card.id} card={card}
-        onClick={canAct && myTurn && game.phase === "play" && !specialPrompt ? () => {
+        onClick={canAct && game.canPlayHand && !specialPrompt ? () => {
           const option = game.specialOptions.find(option => option.cardId === card.id);
           if (option) setPrompt({ ...option, revision: game.revision });
           else act("play", card.id);
@@ -153,13 +161,13 @@ export default function OnlineGameBoard({ room, game, enabled, message, act, onS
         disabled={!canAct || !!specialPrompt} onClick={() => act("bomb-pass")}>폭탄 패 사용 · 더미만 뒤집기 ({mine.bombPassCount})</button>}
       <p>손패 {game.hand.length}장 · 점수 {mine.score}점 · GO {mine.goCount}회</p>
     </section>
-    {specialPrompt && <div className="go-stop-overlay"><div className="go-stop-modal" role="dialog" aria-label="특수 행동 선택">
+    {specialPrompt && <div className="special-action-overlay"><div className="special-action-modal" role="dialog" aria-modal="true" aria-label="특수 행동 선택">
       <h2>{specialPrompt.type === "bomb" ? "폭탄 가능!" : "흔들기 가능!"}</h2>
       <p>{game.hand.find(card => card.id === specialPrompt.cardId)?.month}월 패를 어떻게 내시겠습니까?</p>
-      <div className="go-stop-buttons">
-        <button disabled={!canAct} onClick={() => act(specialPrompt.type, specialPrompt.cardId)}>{specialPrompt.type === "bomb" ? "폭탄 사용" : "흔들기"}</button>
-        <button disabled={!canAct} onClick={() => act("play", specialPrompt.cardId)}>그냥 한 장 내기</button>
-        <button disabled={!canAct} onClick={() => setPrompt(null)}>취소</button>
+      <div className="special-action-buttons">
+        <button className="special-action-confirm" disabled={!canAct} onClick={() => act(specialPrompt.type, specialPrompt.cardId)}>{specialPrompt.type === "bomb" ? "폭탄 사용" : "흔들기"}</button>
+        <button className="special-action-normal" disabled={!canAct} onClick={() => act("play", specialPrompt.cardId)}>그냥 한 장 내기</button>
+        <button className="special-action-normal" disabled={!canAct} onClick={() => setPrompt(null)}>취소</button>
       </div>{message && <p role="alert">{message}</p>}
     </div></div>}
     {myTurn && game.phase === "go-stop" && !animating && <div className="go-stop-overlay"><div className="go-stop-modal">

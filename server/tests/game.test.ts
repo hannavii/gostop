@@ -21,6 +21,79 @@ function specialMatch(bomb = true) {
   return match;
 }
 
+test("both Matgo seats must spend bomb passes before any hand action; two passes restore permission", () => {
+  for (const seat of [0, 1] as const) {
+    let m = specialMatch();
+    if (seat === 1) m.players.reverse();
+    m.turn = seat;
+    m.players[seat].bombPassCount = 2;
+    for (let remaining = 2; remaining > 0; remaining--) {
+      const before = structuredClone(m);
+      assert.equal(gameView(m, seat).canPlayHand, false);
+      assert.deepEqual(gameView(m, seat).specialOptions, []);
+      for (const type of ["play", "bomb", "shake"] as const) {
+        assert.throws(() => applyAction(m, seat, action(m, type, "1-1")), /폭탄 패스/);
+      }
+      assert.deepEqual(m, before);
+      const move = action(m, "bomb-pass");
+      const next = applyAction(m, seat, move);
+      assert.equal(next.players[seat].bombPassCount, remaining - 1);
+      assert.deepEqual(next.players[seat].hand, m.players[seat].hand);
+      assert.equal(next.pile.length, m.pile.length - 1);
+      assert.throws(() => applyAction(next, seat, move));
+      m = next;
+      m.turn = seat; // Isolate the next personal turn without changing the tested action.
+    }
+    assert.equal(gameView(m, seat).canPlayHand, true);
+    assert.throws(() => applyAction(m, seat, action(m, "bomb-pass")));
+  }
+});
+
+test("bomb/shake offers require exactly three hand cards and the correct floor count", () => {
+  for (const count of [2, 3, 4]) for (const floorCount of [0, 1, 2]) {
+    const m = specialMatch();
+    m.players[0].hand = Array.from({ length: count }, (_, i) => card(1, i + 1));
+    m.floor = Array.from({ length: floorCount }, (_, i) => card(1, i + 5));
+    const expected = count === 3 && floorCount <= 1 ? (floorCount ? "bomb" : "shake") : null;
+    assert.deepEqual(gameView(m, 0).specialOptions.map(o => o.type), expected ? [expected, expected, expected] : []);
+    for (const type of ["bomb", "shake"] as const) if (type !== expected) {
+      assert.throws(() => applyAction(m, 0, action(m, type, "1-1")));
+    }
+  }
+});
+
+test("special eligibility checking leaves normal ppeok formation unchanged", () => {
+  const m = specialMatch();
+  // A normal non-bomb match can still ppeok; eligibility checking must not alter it.
+  m.players[0].hand = [card(1, 1), card(3, 1)];
+  m.floor = [card(1, 2)];
+  m.pile = [card(1, 3), card(4, 1)];
+  const next = applyAction(m, 0, action(m, "play", "1-1"));
+  assert.deepEqual(next.events, ["ppeok"]);
+  assert.equal(next.floor.length, 3);
+  assert.equal(next.players[0].captured.length, 0);
+  assert.equal(next.players[0].bombCount, 0);
+});
+
+test("bomb pending draw keeps every card exactly once and reveals no remaining private hand", () => {
+  const m = specialMatch();
+  m.players[0].hand.push(card(12, 1));
+  m.floor.push(card(2, 3));
+  const ids = (match: Match) => {
+    const pending = match.pending?.kind === "draw"
+      ? [...match.pending.choice.capturedBeforeChoice, match.pending.choice.drawnCard]
+      : match.pending?.kind === "hand" ? [match.pending.card] : [];
+    return [...match.players.flatMap(p => [...p.hand, ...p.captured]), ...match.floor, ...match.pile, ...pending]
+      .map(c => c.id).sort();
+  };
+  const next = applyAction(m, 0, action(m, "bomb", "1-1"));
+  assert.equal(next.phase, "choose");
+  assert.deepEqual(ids(next), ids(m));
+  assert.ok(!JSON.stringify(gameView(next, 1)).includes('"id":"12-1"'));
+  const done = applyAction(next, 0, action(next, "choose", "2-1"));
+  assert.deepEqual(ids(done), ids(m));
+});
+
 test("server offers private bomb/shake options; normal play declines without counters", () => {
   for (const bomb of [true, false]) {
     const match = specialMatch(bomb);
@@ -105,7 +178,7 @@ test("special action validation rejects forged conditions, phase, replay and cou
   assert.throws(() => applyAction(shake, 0, action(shake, "shake", "1-1")));
 });
 
-test("passes may precede hand play and preserve ppeok capture and last-action sweep rules", () => {
+test("passes preserve ppeok capture and last-action sweep rules", () => {
   for (const remaining of [0, 1]) {
     const match = specialMatch(false);
     match.players[0].hand = remaining ? [card(10, 2)] : [];

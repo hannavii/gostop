@@ -313,14 +313,20 @@ for (const mode of ["matgo", "gostop"] as const) for (const scenario of ["hand",
     }
     await refresh();
     const state = actor.view!.game!;
-    const type = scenario === "go-stop" ? "stop" : scenario === "special" ? "bomb" : "choose";
+    const mustPass = scenario === "special" && mode === "matgo";
+    if (mustPass) {
+      assert.equal(state.canPlayHand, false);
+      assert.deepEqual(state.specialOptions, []);
+      assert.equal((await actor.socket.timeout(2000).emitWithAck("game:action", move(actor, "bomb", "1-1"))).ok, false);
+    }
+    const type = scenario === "go-stop" ? "stop" : scenario === "special" ? mustPass ? "bomb-pass" : "bomb" : "choose";
     const id = type === "choose" ? state.choice![0].id : type === "bomb" ? "1-1" : undefined;
     assert.equal((await actor.socket.timeout(2000).emitWithAck("game:action", move(actor, type, id))).ok, true);
     await until(() => players.every(p => p.view!.game!.revision === state.revision + 1));
     if (scenario === "go-stop") assert.equal(actor.view!.game!.phase, "finished");
     if (scenario === "special") {
-      assert.equal(actor.view!.game!.players[0].bombCount, 2);
-      assert.equal(actor.view!.game!.players[0].bombPassCount, 4);
+      assert.equal(actor.view!.game!.players[0].bombCount, mustPass ? 1 : 2);
+      assert.equal(actor.view!.game!.players[0].bombPassCount, mustPass ? 1 : 4);
     }
     await refresh();
   });
