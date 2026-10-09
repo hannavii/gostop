@@ -1,0 +1,60 @@
+import type { HwatuCard } from "../src/types/game";
+import type { GostopPpeokStack as PpeokStack, GostopSpecialEvent as SpecialEvent } from "../src/game/gostopTurn";
+import type { SettlementResult } from "../src/game/settlement";
+import type { GostopSettlementResult } from "../src/game/gostopSettlement";
+import type { GameMode } from "../src/game/rules";
+
+export const NICKNAME_MAX_LENGTH = 12;
+export type Seat = 0 | 1 | 2;
+export type GameAction = {
+  roomCode: string;
+  revision: number;
+  type: "play" | "bomb" | "shake" | "bomb-pass" | "choose" | "go" | "stop";
+  cardId?: string;
+};
+export type Reply = { ok: true } | { ok: false; error: string };
+export type Ack = (reply: Reply) => void;
+export type ReconnectSession = { roomCode: string; token: string };
+
+// Explicit public projection. Never add the server's hands, pile or pending state here.
+export type GameView = {
+  mode: GameMode;
+  revision: number;
+  turn: Seat;
+  phase: "play" | "choose" | "go-stop" | "finished";
+  hand: HwatuCard[];
+  // Viewer-specific permission, computed by the server (including bomb passes).
+  canPlayHand: boolean;
+  players: { seat: Seat; handCount: number; captured: HwatuCard[]; score: number; goCount: number;
+    bombCount: number; bombPassCount: number; shakeMonths: number[] }[];
+  specialOptions: { cardId: string; type: "bomb" | "shake" }[];
+  floor: HwatuCard[];
+  drawCount: number;
+  choice: HwatuCard[] | null;
+  revealed: HwatuCard[];
+  specialEvents: SpecialEvent[];
+  ppeokStacks: PpeokStack[];
+  result: { winner: Seat | "draw"; settlement: SettlementResult | null;
+    gostopSettlement?: GostopSettlementResult } | null;
+};
+export type RoomView = { code: string; mode: GameMode; capacity: number; you: Seat; occupancy: number;
+  host: Seat;
+  connections: { seat: Seat; nickname: string; ready: boolean; connected: boolean; reconnectDeadline: number | null }[];
+  game: GameView | null };
+
+export interface ClientEvents {
+  "room:create": (nickname: string, ack: Ack) => void;
+  "room:create-mode": (mode: GameMode, nickname: string, ack: Ack) => void;
+  "room:join": (code: string, nickname: string, ack: Ack) => void;
+  "room:ready": (ready: boolean, ack: Ack) => void;
+  "room:start": (ack: Ack) => void;
+  "room:resume": (session: ReconnectSession, ack: Ack) => void;
+  "room:leave": (ack: Ack) => void;
+  "room:sync": (ack: Ack) => void;
+  "game:action": (action: GameAction, ack: Ack) => void;
+}
+export interface ServerEvents {
+  "room:session": (session: ReconnectSession) => void;
+  "room:state": (view: RoomView) => void;
+  "room:closed": (reason: string) => void;
+}
