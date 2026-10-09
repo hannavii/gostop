@@ -24,11 +24,11 @@
 
 ## 이벤트
 
-3인 확장에서 추가된 이벤트는 **`room:create-mode(mode, ack)`**다. mode는 `matgo` 또는 `gostop`이며 런타임에서 검증한다. 기존 **`room:create(ack)`**는 2인 맞고 생성으로 유지한다. 이후 추가된 `room:session`, `room:resume`은 [재접속 문서](./online-reconnect.md)를 참고한다.
+3인 확장에서 추가된 이벤트는 **`room:create-mode(mode, nickname, ack)`**다. mode는 `matgo` 또는 `gostop`이며 런타임에서 검증한다. 기존 **`room:create(nickname, ack)`**는 2인 맞고 생성으로 유지한다. 생성/참가에는 닉네임이 필수다. 준비와 방장 시작은 [대기실 문서](./online-lobby.md), `room:session`, `room:resume`은 [재접속 문서](./online-reconnect.md)를 참고한다.
 
 `room:join`, `room:leave`, `room:sync`, `game:action`, `room:state`, `room:closed`는 공통으로 사용한다. `game:action`의 행동은 기존과 같은 `play / choose / bomb / shake / bomb-pass / go / stop`이다. 정원, 턴, 카드 소유권, 단계, revision은 서버가 검증하며 클라이언트가 모드·좌석·점수를 행동 요청에 끼워 넣으면 거부한다.
 
-3인 방은 1명 또는 2명일 때 `game: null`이다. 세 번째 플레이어가 참가할 때만 서버가 분배한다. 네 번째 참가자는 거부한다. 연결이 끊기면 60초 동안 같은 좌석 복구를 기다린다. 유예가 만료되거나 명시적으로 나가면 방을 닫고 나머지 모두에게 알린다.
+3인 방은 정원 참가 후에도 `game: null`이다. 세 명 모두 접속하고 준비한 뒤 방장이 `room:start`를 요청할 때 서버가 분배한다. 네 번째 참가자는 거부한다. 연결이 끊기면 60초 동안 같은 좌석 복구를 기다린다. 게임 중 유예가 만료되거나 명시적으로 나가면 방을 닫고 나머지 모두에게 알린다. 대기실에서는 해당 멤버만 제거하고 필요하면 방장을 승계한다.
 
 ## 3인 규칙과 정산
 
@@ -47,7 +47,7 @@ npm run dev:server
 npm run dev
 ```
 
-브라우저 3개에서 동일한 Vite 주소에 접속한다. 첫 화면의 **온라인 2인 맞고 / 3인 고스톱**에서 A가 **3인 고스톱**을 선택하고 방을 만든다. B, C는 방 코드로 참가한다. C 입장 후 각자 차례에 손패를 누르고, 필요한 바닥 선택 및 특수 행동, GO/STOP을 결정한다. 먹은 패 패널을 누르면 확대창이 열린다. 다른 컴퓨터에서 접속하려면 Vite를 `npm run dev -- --host 0.0.0.0`으로 실행하고 호스트 LAN 주소를 사용한다.
+브라우저 3개에서 동일한 Vite 주소에 접속한다. 첫 화면의 **온라인 2인 맞고 / 3인 고스톱**에서 A가 닉네임 입력 후 **3인 고스톱**을 선택하고 방을 만든다. B, C도 닉네임을 입력하고 방 코드로 참가한다. 전원 준비 후 방장 A가 시작하면 각자 차례에 손패를 누르고, 필요한 바닥 선택 및 특수 행동, GO/STOP을 결정한다. 먹은 패 패널을 누르면 확대창이 열린다. 다른 컴퓨터에서 접속하려면 Vite를 `npm run dev -- --host 0.0.0.0`으로 실행하고 호스트 LAN 주소를 사용하며, 해당 프론트 origin을 서버 `ALLOWED_ORIGINS`에 지정한다.
 
 ```sh
 npm run test:online

@@ -60,4 +60,3 @@ export const GAME_SPEED_STYLE = {
   "--stack-in-duration": `${GAME_SPEED.stackIn}ms`,
   "--special-effect-duration": `${GAME_SPEED.specialEffect}ms`,
 } as CSSProperties;
-

@@ -23,4 +23,3 @@ export function getSpecialEventName(event: SpecialEvent) {
       return "";
   }
 }
-
