@@ -3,10 +3,11 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { build, createServer, preview } from 'vite';
+import { checkLayout, checkMobileStates } from './mobile-browser-checks.mjs';
 import { createOnlineServer } from '../server/app.ts';
 
 const executable = process.env.BROWSER_EXECUTABLE ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
@@ -93,7 +94,9 @@ try {
   const ready = session => until(() => evaluate(session, `!!document.querySelector('#online-mode:not(:disabled)')`), 'connected lobby');
   const storage = session => evaluate(session, `JSON.parse(sessionStorage.getItem('gostop.online.reconnect'))`);
 
-  for (const mode of ['matgo', 'gostop']) {
+  const mobileSuite = process.argv.includes('--mobile');
+  const sizes = mobileSuite ? [[360, 800], [375, 812], [390, 844], [412, 915], [1440, 900]] : [[1440, 900]];
+  for (const [width, height] of sizes) for (const mode of ['matgo', 'gostop']) {
     const count = mode === 'gostop' ? 3 : 2;
     const contexts = [], sessions = [];
     for (let i = 0; i < count; i++) {
@@ -103,11 +106,13 @@ try {
       await rpc('Runtime.enable', {}, sessionId);
       await rpc('Network.enable', {}, sessionId);
       await rpc('Page.enable', {}, sessionId);
-      await rpc('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId);
+      await rpc('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: width <= 700 }, sessionId);
+      if (width <= 700) await rpc('Emulation.setTouchEmulationEnabled', { enabled: true }, sessionId);
       await rpc('Page.navigate', { url }, sessionId);
       await until(() => evaluate(sessionId, `!!document.querySelector('.online-mode-entry')`), 'mode entry');
       await evaluate(sessionId, `document.querySelector('.online-mode-entry').click()`);
       await ready(sessionId);
+      if (mobileSuite) await checkLayout(evaluate, sessionId, `${mode}/${width}/lobby`);
       await evaluate(sessionId, `Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(document.querySelector('#online-nickname'),${JSON.stringify('친구' + i)});document.querySelector('#online-nickname').dispatchEvent(new Event('input',{bubbles:true}))`);
     }
     await evaluate(sessions[0], `document.querySelector('#online-mode').value=${JSON.stringify(mode)};document.querySelector('#online-mode').dispatchEvent(new Event('change',{bubbles:true}))`);
@@ -120,6 +125,7 @@ try {
     for (const session of sessions) {
       await until(() => evaluate(session, `!!document.querySelector('.online-waiting-room')`), 'waiting room');
       assert.equal(await evaluate(session, `!!document.querySelector('.online-game-toolbar')`), false);
+      if (mobileSuite) await checkLayout(evaluate, session, `${mode}/${width}/waiting`);
     }
     assert.equal(await evaluate(sessions[0], `document.querySelector('.online-start').disabled`), true);
     await click(sessions[0], '방 코드 복사');
@@ -144,10 +150,21 @@ try {
       // Also obtains a snapshot if initial room events used HTTP polling.
       await click(session, '새로고침');
       await until(() => !!views.get(session)?.game, 'WebSocket snapshot');
+      if (mobileSuite) await checkLayout(evaluate, session, `${mode}/${width}/game`);
+      if (width > 700) {
+        const desktop = await evaluate(session, `(() => { const card=document.querySelector('.player-area .card'); const panel=document.querySelector('.captured-panel'); return {width:card.getBoundingClientRect().width,height:card.getBoundingClientRect().height,panel:getComputedStyle(panel).position}; })()`);
+        assert.ok(Math.abs(desktop.width - 61.92) < 1, 'desktop card width retained');
+        assert.equal(desktop.height, 96, 'desktop card height retained');
+        assert.equal(desktop.panel, 'fixed', 'desktop captured panel position retained');
+      }
+    }
+    if (mobileSuite) {
+      const { data } = await rpc('Page.captureScreenshot', { format: 'png' }, sessions[0]);
+      await writeFile(resolve(artifactRoot, `mobile-${mode}-${width}-game.png`), Buffer.from(data, 'base64'));
     }
     // Observe every DOM mutation while a real server action animates, in all seats.
     for (const session of sessions) await evaluate(session, `(() => {
-      window.animationChecks = { flights: 0, captures: 0, duplicates: [] };
+      window.animationChecks = { flights: 0, captures: 0, duplicates: [], outside: [] };
       const check = () => {
         const flights = [...document.querySelectorAll('.animation-layer .flying-face--front .card, .capture-flight-layer .card')];
         if (document.querySelector('.animation-layer')) window.animationChecks.flights++;
@@ -158,6 +175,17 @@ try {
       };
       window.animationObserver = new MutationObserver(check);
       window.animationObserver.observe(document.querySelector('main.game'), { childList: true, subtree: true, attributes: true });
+      window.animationSampling = true;
+      const sample = () => {
+        if (!window.animationSampling) return;
+        if (innerWidth <= 700) for (const e of document.querySelectorAll('.flying-card, .capture-flight')) {
+          const r=e.getBoundingClientRect();
+          if (r.left < -1 || r.right > innerWidth + 1 || r.top < -1 || r.bottom > innerHeight + 1)
+            window.animationChecks.outside.push([e.className, r.left, r.top, r.right, r.bottom]);
+        }
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
     })()`);
     // Make one actual hand play before reloading, preserving any pending choice.
     await evaluate(sessions[0], `document.querySelector('[aria-label="내 손패"] button.card').click()`);
@@ -167,9 +195,10 @@ try {
 
     for (const session of sessions) {
       await until(() => evaluate(session, `!document.querySelector('.is-animating')`), 'animation completion');
-      const checks = await evaluate(session, `window.animationObserver.disconnect(); window.animationChecks`);
+      const checks = await evaluate(session, `window.animationSampling=false; window.animationObserver.disconnect(); window.animationChecks`);
       assert.ok(checks.flights > 0, 'real play flight observed');
       assert.deepEqual(checks.duplicates, [], 'no flying card at final board/captured/hand location');
+      assert.deepEqual(checks.outside, [], 'mobile flights stay inside the viewport');
     }
     console.log(`PASS ${mode}: all ${count} contexts observed real card flights without duplicate board locations.`);
 
@@ -231,6 +260,10 @@ try {
     await delay(150);
     await evaluate(actor, `[...document.querySelectorAll('button')].find(b=>b.textContent==='그냥 한 장 내기')?.click()`);
     await until(() => sessions.every(s => views.get(s)?.game?.revision > state.revision), 'continued game synchronized');
+    if (mobileSuite && width <= 700) {
+      await until(() => evaluate(sessions[0], `!document.querySelector('.is-animating')`), 'continued animation complete');
+      await checkMobileStates({ evaluate, rpc, until, session: sessions[0], mode, width, height });
+    }
     // Explicit leave clears saved credentials in every connected participant.
     await until(() => evaluate(sessions[0], `!!document.querySelector('.online-game-toolbar button:not(:disabled)')`), 'leave enabled');
     await click(sessions[0], '방 나가기');

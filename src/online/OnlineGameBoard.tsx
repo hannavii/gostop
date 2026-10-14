@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useLayoutEffect, useRef, useState } from "react";
 import type { GameAction, GameView, RoomView, Seat } from "../../shared/online";
 import RoomCode from "./RoomCode";
 import Card from "../components/Card";
@@ -21,6 +21,48 @@ export default function OnlineGameBoard({ room, game: latestGame, enabled, messa
   const specialPrompt = prompt?.revision === game.revision && game.canPlayHand &&
     game.specialOptions.some(option => option.cardId === prompt.cardId && option.type === prompt.type) ? prompt : null;
   const [expandedPpeokMonth, setExpandedPpeokMonth] = useState<number | null>(null);
+  const boardRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const board = boardRef.current;
+    if (!board) return;
+    const measure = () => {
+      if (!window.matchMedia('(max-width: 700px)').matches) return;
+      const bounds = board.getBoundingClientRect();
+      const anchor = (name: string, element: Element | null) => {
+        if (!element) return;
+        const rect = element.getBoundingClientRect();
+        board.style.setProperty(`--${name}-x`, `${rect.left + rect.width / 2 - bounds.left + board.scrollLeft}px`);
+        let centerY = rect.top + rect.height / 2;
+        if (name === 'floor') {
+          const table = board.querySelector('.table')!.getBoundingClientRect();
+          // The floor may be taller than its scrollport, or empty after a capture.
+          const top = Math.max(rect.top, table.top);
+          const bottom = Math.min(rect.bottom, table.bottom);
+          centerY = bottom > top ? (top + bottom) / 2 : table.top + table.height / 2;
+        }
+        board.style.setProperty(`--${name}-y`, `${centerY - bounds.top + board.scrollTop}px`);
+      };
+      anchor('player', board.querySelector('.player-area .card-row'));
+      const relative = (game.turn - room.you + game.players.length) % game.players.length;
+      anchor('opponent', board.querySelector(game.mode === 'gostop'
+        ? `.gostop3-opponent-zone:nth-child(${Math.max(1, relative)}) .card-row` : '.opponent-area .card-row'));
+      anchor('draw', board.querySelector('.draw-pile-area .card-back') ?? board.querySelector('.draw-pile-area'));
+      anchor('floor', board.querySelector('.floor-cards'));
+      const recipient = visual.captured && latestGame.players.find(player =>
+        player.captured.some(card => card.id === visual.captured?.cards[0]?.id));
+      const captureRelative = recipient ? (recipient.seat - room.you + game.players.length) % game.players.length : 0;
+      anchor('capture', board.querySelector(game.mode === 'gostop'
+        ? `.gostop3-captured-panel--${captureRelative ? `opponent${captureRelative}` : 'player'}`
+        : `.captured-panel--${captureRelative ? 'left' : 'right'}`));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    for (const element of board.querySelectorAll('.card-row, .floor-cards, .captured-panel, .draw-pile-area')) observer.observe(element);
+    observer.observe(board);
+    window.addEventListener('resize', measure);
+    board.addEventListener('scroll', measure, true);
+    return () => { observer.disconnect(); window.removeEventListener('resize', measure); board.removeEventListener('scroll', measure, true); };
+  }, [game.turn, game.mode, game.players.length, room.you, visual.captured, latestGame.players]);
   const mine = game.players[room.you];
   const three = game.mode === "gostop";
   const relativeSeat = (seat: Seat) => (seat - room.you + game.players.length) % game.players.length;
@@ -35,7 +77,7 @@ export default function OnlineGameBoard({ room, game: latestGame, enabled, messa
   const turnMessage = message || (finished ? "게임이 끝났습니다." : !myTurn
     ? game.phase === "choose" ? `${name(game.turn)}님이 바닥패를 선택하고 있습니다.` : game.phase === "go-stop" ? `${name(game.turn)}님이 GO / STOP을 선택하고 있습니다.` : `${name(game.turn)}님 차례입니다.`
     : game.phase === "play" ? game.canPlayHand ? "낼 카드를 선택하세요." : "남은 폭탄 패스를 사용하세요." : "");
-  return <main className={`game ${three ? "gostop3-game online-gostop-game" : "online-matgo-game"} ${animating ? "is-animating" : ""}`} style={GAME_SPEED_STYLE}>
+  return <main ref={boardRef} className={`game ${three ? "gostop3-game online-gostop-game" : "online-matgo-game"} ${animating ? "is-animating" : ""}`} style={GAME_SPEED_STYLE}>
     <nav className="online-game-toolbar" aria-label="방 정보">
       <RoomCode code={room.code} />
       <span> {room.occupancy}/{room.capacity}명 · {three ? "3인 고스톱" : "2인 맞고"}</span>
