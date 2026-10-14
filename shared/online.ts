@@ -12,6 +12,7 @@ export type GameAction = {
   type: "play" | "bomb" | "shake" | "bomb-pass" | "choose" | "go" | "stop";
   cardId?: string;
 };
+export type RematchRequest = { roomCode: string; round: number; ready: boolean };
 export type Reply = { ok: true } | { ok: false; error: string };
 export type Ack = (reply: Reply) => void;
 export type ReconnectSession = { roomCode: string; token: string };
@@ -38,8 +39,8 @@ export type GameView = {
     gostopSettlement?: GostopSettlementResult } | null;
 };
 export type RoomView = { code: string; mode: GameMode; capacity: number; you: Seat; occupancy: number;
-  host: Seat;
-  connections: { seat: Seat; nickname: string; ready: boolean; connected: boolean; reconnectDeadline: number | null }[];
+  host: Seat; round: number;
+  connections: { seat: Seat; nickname: string; ready: boolean; rematchReady: boolean; connected: boolean; reconnectDeadline: number | null }[];
   game: GameView | null };
 
 export interface ClientEvents {
@@ -51,6 +52,7 @@ export interface ClientEvents {
   "room:resume": (session: ReconnectSession, ack: Ack) => void;
   "room:leave": (ack: Ack) => void;
   "room:sync": (ack: Ack) => void;
+  "game:rematch": (request: RematchRequest, ack: Ack) => void;
   "game:action": (action: GameAction, ack: Ack) => void;
 }
 export interface ServerEvents {

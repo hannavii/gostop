@@ -3,6 +3,7 @@ import { io, type Socket } from "socket.io-client";
 import { NICKNAME_MAX_LENGTH } from "../../shared/online";
 import RoomCode from "./RoomCode";
 import OnlineGameBoard from "./OnlineGameBoard";
+import { acceptRoomState, boardPresentationKey } from "./roomState";
 import type { ClientEvents, GameAction, Reply, RoomView, ServerEvents } from "../../shared/online";
 import "./online.css";
 import type { GameMode } from "../game/rules";
@@ -73,8 +74,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
     });
     socket.on("room:state", view => {
       if (resetPresentation) { setPresentationEpoch(epoch => epoch + 1); resetPresentation = false; }
-      setRoom(previous => previous?.code === view.code && previous.game && view.game &&
-        previous.game.revision > view.game.revision ? { ...view, game: previous.game } : view);
+      setRoom(previous => acceptRoomState(previous, view));
       setMessage("");
     });
     socket.on("room:session", session => {
@@ -130,8 +130,11 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
   const connectionMessage = offline.length ? `${offline.map(c => c.nickname).join(", ")}님이 재접속 중입니다... 해당 플레이어의 차례는 복구될 때까지 기다립니다.` : "";
   const displayedMessage = [message, storageWarning, connectionMessage].filter(Boolean).join(" ");
   const validNickname = nickname.trim().length > 0 && nickname.trim().length <= NICKNAME_MAX_LENGTH;
-  if (room && game) return <OnlineGameBoard key={`${room.code}:${presentationEpoch}`} room={room} game={game}
+  if (room && game) return <OnlineGameBoard key={boardPresentationKey(room, presentationEpoch)} room={room} game={game}
     enabled={enabled} message={displayedMessage} act={act}
+    onRematch={ready => void request(s => s.timeout(5000).emitWithAck("game:rematch", {
+      roomCode: room.code, round: room.round, ready,
+    }))}
     onSync={() => void request(s => s.timeout(5000).emitWithAck("room:sync"))}
     onLeave={() => void request(s => s.timeout(5000).emitWithAck("room:leave"))} />;
 

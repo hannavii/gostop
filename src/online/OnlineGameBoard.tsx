@@ -12,9 +12,10 @@ import GostopOnlineSettlement from "./GostopOnlineSettlement";
 type Props = {
   room: RoomView; game: GameView; enabled: boolean; message: string;
   act: (type: GameAction["type"], cardId?: string) => void;
+  onRematch: (ready: boolean) => void;
   onSync: () => void; onLeave: () => void;
 };
-export default function OnlineGameBoard({ room, game: latestGame, enabled, message, act, onSync, onLeave }: Props) {
+export default function OnlineGameBoard({ room, game: latestGame, enabled, message, act, onRematch, onSync, onLeave }: Props) {
   const { game, visual, animating } = usePresentation(latestGame, room.you);
   const [detail, setDetail] = useState<Seat | null>(null);
   const [prompt, setPrompt] = useState<{ revision: number; cardId: string; type: "bomb" | "shake" } | null>(null);
@@ -169,8 +170,19 @@ export default function OnlineGameBoard({ room, game: latestGame, enabled, messa
         <div className="settlement-multipliers">{settlement.multipliers.map(item => <div key={item.id} className="settlement-multiplier"><span>{item.label}</span><strong>×{item.multiplier}</strong></div>)}</div>
         <div className="settlement-total"><span>최종 정산 점수</span><strong>{settlement.finalScore}점</strong></div>
       </div>}
-      <p>다시 플레이하려면 새 방을 만들어 주세요.</p>
-      <button className="restart-game-button" disabled={!enabled} onClick={onLeave}>방 나가기</button>
+      <section className="rematch-status" aria-label="다시하기 동의 상태" aria-live="polite">
+        <p>모두 다시하기에 동의하고 접속하면 같은 방에서 새 판을 시작합니다.</p>
+        <ul>{room.connections.map(player => <li key={player.seat}>
+          <span>{player.nickname}{player.seat === room.you ? " (나)" : ""}</span>
+          <strong>{player.rematchReady ? "다시하기 동의" : "대기 중"}{!player.connected && " · 재접속 대기"}</strong>
+        </li>)}</ul>
+      </section>
+      <div className="rematch-actions">
+        <button className="rematch-button" disabled={!canAct} onClick={() => onRematch(!room.connections[room.you].rematchReady)}>
+          {room.connections[room.you].rematchReady ? "다시하기 취소" : "다시하기"}
+        </button>
+        <button className="restart-game-button" disabled={!enabled} onClick={onLeave}>방 나가기</button>
+      </div>{message && <p role="alert">{message}</p>}
     </div></div>}
   </main>;
 }
