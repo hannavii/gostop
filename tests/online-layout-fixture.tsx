@@ -15,12 +15,12 @@ export function mountLayoutFixture(game: GameView) {
     document.getElementById('root')!.style.display = 'none';
     root = createRoot(element);
   }
-  const room: RoomView = { code: 'ABC123', mode: game.mode, capacity: game.players.length, occupancy: game.players.length,
+  const room: RoomView = { round: 1, code: 'ABC123', mode: game.mode, capacity: game.players.length, occupancy: game.players.length,
     host: 0, you: 0, game, connections: game.players.map(player => ({ seat: player.seat,
-      nickname: '모바일친구닉네임12', ready: true, connected: true, reconnectDeadline: null })) };
+      nickname: '모바일친구닉네임12', ready: true, rematchReady: false, connected: true, reconnectDeadline: null })) };
   const version = ++generation;
   root!.render(<div data-layout-generation={version} style={{ display: 'contents' }}><OnlineGameBoard key={version} room={room} game={game}
-    enabled message="" act={(type, cardId) => { (window as unknown as { layoutAction: unknown }).layoutAction = { type, cardId }; }} onSync={() => {}} onLeave={() => {}} /></div>);
+    enabled message="" act={(type, cardId) => { (window as unknown as { layoutAction: unknown }).layoutAction = { type, cardId }; }} onRematch={ready => { (window as unknown as { layoutAction: unknown }).layoutAction = { type: "rematch", ready }; }} onSync={() => {}} onLeave={() => {}} /></div>);
   return version;
 }
 export function unmountLayoutFixture() {

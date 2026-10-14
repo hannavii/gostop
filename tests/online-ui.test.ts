@@ -21,11 +21,11 @@ function fixture(): GameView {
     revealed: [], specialEvents: [], ppeokStacks: [], result: null, specialOptions: [],
   };
 }
-function board(game: GameView, you: Seat = 0, names?: string[]) {
+function board(game: GameView, you: Seat = 0, names?: string[], rematchSeats: Seat[] = []) {
   return renderToStaticMarkup(createElement(OnlineGameBoard, {
-    game, room: { code: "ABC123", mode: game.mode, capacity: game.players.length, host: 0, you, occupancy: game.players.length,
-      connections: game.players.map(p => ({ seat: p.seat, nickname: names?.[p.seat] ?? (p.seat === you ? "나" : game.mode === "gostop" ? `상대 ${(p.seat - you + 3) % 3}` : "상대방"), ready: true, connected: true, reconnectDeadline: null })), game }, enabled: true,
-    message: "", act() {}, onSync() {}, onLeave() {},
+    game, room: { round: 1, code: "ABC123", mode: game.mode, capacity: game.players.length, host: 0, you, occupancy: game.players.length,
+      connections: game.players.map(p => ({ seat: p.seat, nickname: names?.[p.seat] ?? (p.seat === you ? "나" : game.mode === "gostop" ? `상대 ${(p.seat - you + 3) % 3}` : "상대방"), ready: true, rematchReady: rematchSeats.includes(p.seat), connected: true, reconnectDeadline: null })), game }, enabled: true,
+    message: "", act() {}, onRematch() {}, onSync() {}, onLeave() {},
   }));
 }
 
@@ -160,5 +160,21 @@ test("three-seat choices and GO/STOP belong only to actor; settlement names rota
     assert.match(html, /총 획득/);
     const payer = you === 0 ? "나" : `상대 ${(3 - you) % 3}`;
     assert.ok(html.includes(`${payer} 고박:`));
+  }
+});
+
+
+test("rematch status belongs to every seat and only appears after the match finishes", () => {
+  for (const mode of ["matgo", "gostop"] as const) {
+    const match = createMatch(mode);
+    assert.ok(!board(gameView(match, 0)).includes('rematch-button'));
+    match.phase = "finished"; match.result = { winner: "draw", settlement: null };
+    for (const you of match.players.map((_, i) => i as Seat)) {
+      const html = board(gameView(match, you), you, undefined, [0]);
+      assert.match(html, /rematch-status/);
+      assert.equal((html.match(/<li>/g) ?? []).length, match.players.length);
+      assert.match(html, /rematch-button/);
+      assert.ok(html.includes(you === 0 ? '\ub2e4\uc2dc\ud558\uae30 \ucde8\uc18c' : '>\ub2e4\uc2dc\ud558\uae30<'));
+    }
   }
 });

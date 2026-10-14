@@ -4,7 +4,8 @@ import { createMatch, gameView } from '../server/game';
 import { hwatuCards } from '../src/data/cards';
 import { GAME_SPEED } from '../src/components/matgoSpeed';
 import { presentationFrames, receivePresentation, advancePresentation } from '../src/online/presentation';
-import type { GameView } from '../shared/online';
+import { acceptRoomState, boardPresentationKey } from '../src/online/roomState';
+import type { GameView, RoomView } from '../shared/online';
 
 for (const mode of ['matgo', 'gostop'] as const) {
   test(`${mode}: play / reveal / capture use speed boundaries without duplicate locations`, () => {
@@ -79,4 +80,19 @@ test('GAME_SPEED timer boundaries keep destination hidden until the movement com
   assert.ok(state.frames[state.index].game.floor.some(c => c.id === card.id));
   assert.equal(state.frames[state.index].visual.card, undefined);
   clearTimeout(timer);
+});
+
+
+test('new round resets presentation identity while stale old snapshots cannot restore it', () => {
+  const game = gameView(createMatch('matgo'), 0);
+  const first: RoomView = { code: 'ABC123', round: 1, mode: 'matgo', host: 0, you: 0, capacity: 2, occupancy: 2, connections: [], game: { ...game, revision: 10 } };
+  const consent = { ...first, connections: [{ seat: 0 as const, nickname: 'Host', ready: true, rematchReady: true, connected: true, reconnectDeadline: null }] };
+  assert.equal(boardPresentationKey(consent, 0), boardPresentationKey(first, 0));
+  const second = { ...first, round: 2, game: { ...game, revision: 11 } };
+  assert.notEqual(boardPresentationKey(second, 0), boardPresentationKey(first, 0));
+  assert.equal(acceptRoomState(first, second), second);
+  assert.equal(acceptRoomState(second, { ...first, game: { ...game, revision: 999 } }), second);
+  assert.equal(acceptRoomState(second, { ...second, game: { ...game, revision: 10 } }), second);
+  assert.equal(acceptRoomState(first, consent), consent);
+  assert.notEqual(boardPresentationKey(second, 0), boardPresentationKey(second, 1));
 });

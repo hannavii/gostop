@@ -9,9 +9,9 @@ import { GAME_RULES, type GameMode } from "../src/game/rules";
 import { readServerConfig } from "./config";
 
 export const RECONNECT_GRACE_MS = 60_000;
-type Member = { nickname: string; ready: boolean; socketId: string | null; tokenHash: Buffer; deadline: number | null;
+type Member = { nickname: string; ready: boolean; rematchReady: boolean; socketId: string | null; tokenHash: Buffer; deadline: number | null;
   timer: ReturnType<typeof setTimeout> | null };
-type Room = { code: string; mode: GameMode; members: Member[]; host: Member | null; match: Match | null };
+type Room = { code: string; mode: GameMode; members: Member[]; host: Member | null; match: Match | null; round: number };
 const hashToken = (token: string) => createHash("sha256").update(token).digest();
 
 export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matchFactory = createMatch,
@@ -46,13 +46,24 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       if (!member.socketId) return;
       // Never broadcast raw Room/Match, even to members of the same room.
       io.to(member.socketId).emit("room:state", {
-        code: room.code, you: seat as Seat, occupancy: room.members.length,
+        code: room.code, round: room.round, you: seat as Seat, occupancy: room.members.length,
         host: room.members.indexOf(room.host!) as Seat,
         mode: room.mode, capacity: GAME_RULES[room.mode].playerCount,
-        connections: room.members.map((m, i) => ({ seat: i as Seat, nickname: m.nickname, ready: m.ready, connected: m.socketId !== null, reconnectDeadline: m.deadline })),
+        connections: room.members.map((m, i) => ({ seat: i as Seat, nickname: m.nickname, ready: m.ready, rematchReady: m.rematchReady, connected: m.socketId !== null, reconnectDeadline: m.deadline })),
         game: room.match ? gameView(room.match, seat as Seat) : null,
       });
     });
+  }
+
+  function startRematch(room: Room) {
+    if (room.match?.phase !== "finished" || room.members.length !== GAME_RULES[room.mode].playerCount ||
+      room.members.some(member => !member.rematchReady || !member.socketId)) return;
+    const match = matchFactory(room.mode);
+    // Room-wide revision prevents an old game:action from matching a new deal.
+    match.revision = room.match.revision + 1;
+    room.match = match;
+    room.round++;
+    room.members.forEach(member => { member.rematchReady = false; });
   }
 
   function closeRoom(room: Room, reason: string) {
@@ -127,7 +138,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
     }
     function addMember(room: Room, name: string) {
       const token = randomBytes(32).toString("hex");
-      room.members.push({ nickname: name, ready: false, socketId: socket.id, tokenHash: hashToken(token), deadline: null, timer: null });
+      room.members.push({ nickname: name, ready: false, rematchReady: false, socketId: socket.id, tokenHash: hashToken(token), deadline: null, timer: null });
       room.host ??= room.members[0];
       membership.set(socket.id, room.code);
       // Credentials go only to their owner, never in a public room snapshot.
@@ -140,7 +151,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       if (rooms.size >= 1000) throw new Error("현재 생성 가능한 방이 가득 찼습니다.");
       let code: string;
       do { code = randomInt(0, 36 ** 6).toString(36).toUpperCase().padStart(6, "0"); } while (rooms.has(code));
-      const room: Room = { code, mode, members: [], host: null, match: null };
+      const room: Room = { code, mode, members: [], host: null, match: null, round: 0 };
       rooms.set(code, room);
       addMember(room, name);
       publish(room);
@@ -185,6 +196,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       membership.set(socket.id, room.code);
       // Stable token makes retries safe even if the previous acknowledgement was lost.
       socket.emit("room:session", { roomCode: room.code, token: input.token });
+      startRematch(room);
       publish(room);
     }));
     socket.on("room:ready", (ready, ack) => handle(ack, () => {
@@ -200,6 +212,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       if (room.members.length !== GAME_RULES[room.mode].playerCount ||
         room.members.some(m => !m.socketId || !m.ready)) throw new Error("모든 인원이 접속하고 준비를 완료해야 합니다.");
       room.match = matchFactory(room.mode);
+      room.round++;
       publish(room);
     }));
     socket.on("room:leave", ack => handle(ack, () => {
@@ -207,6 +220,22 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       removeMember(room, room.members.find(m => m.socketId === socket.id)!, "플레이어가 방을 나갔습니다.");
     }));
     socket.on("room:sync", ack => handle(ack, () => publish(currentRoom())));
+    socket.on("game:rematch", (input, ack) => handle(ack, () => {
+      if (!input || typeof input !== "object" || Array.isArray(input) ||
+        Object.keys(input).some(key => !["roomCode", "round", "ready"].includes(key)) ||
+        typeof input.roomCode !== "string" || !/^[A-Z0-9]{6}$/.test(input.roomCode) ||
+        !Number.isSafeInteger(input.round) || input.round < 1 || typeof input.ready !== "boolean") {
+        throw new Error("잘못된 다시하기 요청입니다.");
+      }
+      const room = currentRoom();
+      if (room.code !== input.roomCode || room.round !== input.round) throw new Error("지난 판의 다시하기 요청입니다.");
+      if (room.match?.phase !== "finished") throw new Error("게임 종료 후 다시하기를 선택해주세요.");
+      const member = room.members.find(m => m.socketId === socket.id)!;
+      const previous = member.rematchReady;
+      member.rematchReady = input.ready;
+      try { startRematch(room); } catch (error) { member.rematchReady = previous; throw error; }
+      publish(room);
+    }));
     socket.on("game:action", (input, ack) => handle(ack, () => {
       const action = parseAction(input);
       const room = currentRoom();

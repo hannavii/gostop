@@ -7,6 +7,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { build, createServer, preview } from 'vite';
+import { checkRematch } from './browser-rematch-checks.mjs';
 import { checkLayout, checkMobileStates } from './mobile-browser-checks.mjs';
 import { createOnlineServer } from '../server/app.ts';
 
@@ -95,7 +96,8 @@ try {
   const storage = session => evaluate(session, `JSON.parse(sessionStorage.getItem('gostop.online.reconnect'))`);
 
   const mobileSuite = process.argv.includes('--mobile');
-  const sizes = mobileSuite ? [[360, 800], [375, 812], [390, 844], [412, 915], [1440, 900]] : [[1440, 900]];
+  const rematchSuite = process.argv.includes('--rematch');
+  const sizes = rematchSuite ? [[360, 800], [1440, 900]] : mobileSuite ? [[360, 800], [375, 812], [390, 844], [412, 915], [1440, 900]] : [[1440, 900]];
   for (const [width, height] of sizes) for (const mode of ['matgo', 'gostop']) {
     const count = mode === 'gostop' ? 3 : 2;
     const contexts = [], sessions = [];
@@ -264,6 +266,7 @@ try {
       await until(() => evaluate(sessions[0], `!document.querySelector('.is-animating')`), 'continued animation complete');
       await checkMobileStates({ evaluate, rpc, until, session: sessions[0], mode, width, height });
     }
+    if (rematchSuite) await checkRematch({ evaluate, rpc, until, click, storage, views, sessions, mode, width });
     // Explicit leave clears saved credentials in every connected participant.
     await until(() => evaluate(sessions[0], `!!document.querySelector('.online-game-toolbar button:not(:disabled)')`), 'leave enabled');
     await click(sessions[0], '방 나가기');

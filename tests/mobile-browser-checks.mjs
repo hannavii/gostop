@@ -93,6 +93,8 @@ export async function checkMobileStates({ evaluate, rpc, until, session, mode, w
     ? { winner: 0, settlement: null, gostopSettlement: calculateGostopSettlement({ winner: 0, players: snapshot.players.map(p => ({ index: p.seat, cards: p.captured, goCount: p.goCount, shakeCount: p.shakeMonths.length, bombCount: p.bombCount })) }) }
     : { winner: 0, settlement: calculateSettlement(snapshot.players[0].captured, snapshot.players[1].captured, 3, 1, 3, 2) };
   await mount({ ...snapshot, phase: 'finished', result, specialOptions: [] }, '.game-over-modal');
+  await press('.rematch-button');
+  await expectAction('rematch');
   await press('.restart-game-button');
   await checkLayout(evaluate, session, 'result scrolled to leave button');
   await evaluate(session, `import('/tests/online-layout-fixture.tsx').then(m => m.unmountLayoutFixture())`);
