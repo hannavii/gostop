@@ -13,6 +13,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
   const socketRef = useRef<OnlineSocket | null>(null);
   const sending = useRef(false);
   const sessionRef = useRef(readReconnectSession());
+  const [presentationEpoch, setPresentationEpoch] = useState(0);
   const [connected, setConnected] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [storageWarning, setStorageWarning] = useState("");
@@ -26,6 +27,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     const socket: OnlineSocket = io(import.meta.env.VITE_SOCKET_URL?.trim() || undefined, { autoConnect: false });
     socketRef.current = socket;
+    let resetPresentation = true;
     let disposed = false;
     let retry: ReturnType<typeof setTimeout> | undefined;
     async function restore() {
@@ -51,6 +53,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
       }
     }
     socket.on("connect", () => {
+      resetPresentation = true;
       setConnected(true);
       if (sessionRef.current) void restore();
       else { setRestoring(false); setMessage("방을 만들거나 방 코드로 참가하세요."); }
@@ -68,7 +71,12 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
     socket.on("connect_error", () => {
       setMessage("서버에 연결할 수 없습니다. 서버 실행 상태를 확인해주세요.");
     });
-    socket.on("room:state", view => { setRoom(view); setMessage(""); });
+    socket.on("room:state", view => {
+      if (resetPresentation) { setPresentationEpoch(epoch => epoch + 1); resetPresentation = false; }
+      setRoom(previous => previous?.code === view.code && previous.game && view.game &&
+        previous.game.revision > view.game.revision ? { ...view, game: previous.game } : view);
+      setMessage("");
+    });
     socket.on("room:session", session => {
       sessionRef.current = session;
       setStorageWarning(saveReconnectSession(session) ? "" : "브라우저 저장소를 사용할 수 없어 새로고침 복구가 불가능합니다.");
@@ -122,7 +130,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
   const connectionMessage = offline.length ? `${offline.map(c => c.nickname).join(", ")}님이 재접속 중입니다... 해당 플레이어의 차례는 복구될 때까지 기다립니다.` : "";
   const displayedMessage = [message, storageWarning, connectionMessage].filter(Boolean).join(" ");
   const validNickname = nickname.trim().length > 0 && nickname.trim().length <= NICKNAME_MAX_LENGTH;
-  if (room && game) return <OnlineGameBoard key={room.code} room={room} game={game}
+  if (room && game) return <OnlineGameBoard key={`${room.code}:${presentationEpoch}`} room={room} game={game}
     enabled={enabled} message={displayedMessage} act={act}
     onSync={() => void request(s => s.timeout(5000).emitWithAck("room:sync"))}
     onLeave={() => void request(s => s.timeout(5000).emitWithAck("room:leave"))} />;
