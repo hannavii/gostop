@@ -145,11 +145,33 @@ try {
       await click(session, '새로고침');
       await until(() => !!views.get(session)?.game, 'WebSocket snapshot');
     }
+    // Observe every DOM mutation while a real server action animates, in all seats.
+    for (const session of sessions) await evaluate(session, `(() => {
+      window.animationChecks = { flights: 0, captures: 0, duplicates: [] };
+      const check = () => {
+        const flights = [...document.querySelectorAll('.animation-layer .flying-face--front .card, .capture-flight-layer .card')];
+        if (document.querySelector('.animation-layer')) window.animationChecks.flights++;
+        if (document.querySelector('.capture-flight-layer')) window.animationChecks.captures++;
+        const board = [...document.querySelectorAll('.floor-cards .floor-card-slot > .card, .ppeok-stack-cards .card, .captured-panel .card, .player-area .card')];
+        for (const card of flights) if (board.some(other => other.textContent === card.textContent))
+          window.animationChecks.duplicates.push(card.textContent);
+      };
+      window.animationObserver = new MutationObserver(check);
+      window.animationObserver.observe(document.querySelector('main.game'), { childList: true, subtree: true, attributes: true });
+    })()`);
     // Make one actual hand play before reloading, preserving any pending choice.
     await evaluate(sessions[0], `document.querySelector('[aria-label="내 손패"] button.card').click()`);
     await delay(150);
     await evaluate(sessions[0], `[...document.querySelectorAll('button')].find(b=>b.textContent==='그냥 한 장 내기')?.click()`);
     await until(() => sessions.every(s => views.get(s)?.game?.revision > 0), 'first action');
+
+    for (const session of sessions) {
+      await until(() => evaluate(session, `!document.querySelector('.is-animating')`), 'animation completion');
+      const checks = await evaluate(session, `window.animationObserver.disconnect(); window.animationChecks`);
+      assert.ok(checks.flights > 0, 'real play flight observed');
+      assert.deepEqual(checks.duplicates, [], 'no flying card at final board/captured/hand location');
+    }
+    console.log(`PASS ${mode}: all ${count} contexts observed real card flights without duplicate board locations.`);
 
     for (let seat = 0; seat < count; seat++) {
       const session = sessions[seat];

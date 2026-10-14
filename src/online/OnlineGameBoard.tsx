@@ -1,13 +1,12 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useState } from "react";
 import type { GameAction, GameView, RoomView, Seat } from "../../shared/online";
 import RoomCode from "./RoomCode";
 import Card from "../components/Card";
 import CapturedPanel from "../components/CapturedPanel";
 import CapturedCardsModal from "../components/CapturedCardsModal";
 import MatgoTable from "../components/MatgoTable";
-import { GAME_SPEED, GAME_SPEED_STYLE } from "../components/matgoSpeed";
-import { getSpecialEventName } from "../components/matgoEvents";
-import type { HwatuCard } from "../types/game";
+import { GAME_SPEED_STYLE } from "../components/matgoSpeed";
+import { usePresentation } from "./usePresentation";
 import GostopOnlineSettlement from "./GostopOnlineSettlement";
 
 type Props = {
@@ -15,74 +14,13 @@ type Props = {
   act: (type: GameAction["type"], cardId?: string) => void;
   onSync: () => void; onLeave: () => void;
 };
-type Presentation = {
-  card?: HwatuCard; kind?: string; faceUp?: boolean;
-  captured?: { cards: HwatuCard[]; side: string };
-  effect?: string;
-};
-
-// Presentation only: animate differences between public server snapshots.
-// A newer snapshot cancels obsolete effects; it never waits for a local rules engine.
-function usePresentation(game: GameView, you: Seat) {
-  const previous = useRef(game);
-  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const [visual, setVisual] = useState<Presentation>({});
-  useEffect(() => () => timers.current.forEach(clearTimeout), []);
-  useEffect(() => {
-    const before = previous.current;
-    if (before.revision === game.revision) return;
-    previous.current = game;
-    timers.current.forEach(clearTimeout);
-    timers.current = [];
-    const schedule = (value: Presentation, delay: number) => {
-      timers.current.push(setTimeout(() => setVisual(value), delay));
-    };
-    const side = before.turn === you ? "player" : "opponent";
-    const newCards = game.revealed.filter(card => !before.revealed.some(old => old.id === card.id));
-    let delay = 0;
-    const newShakeMonths = game.players[before.turn].shakeMonths.filter(month =>
-      !before.players[before.turn].shakeMonths.includes(month));
-    for (const month of newShakeMonths) {
-      schedule({ effect: `${side === "player" ? "흔들기!" : "상대방 흔들기!"} ${month}월 ×3 공개` }, delay);
-      delay += GAME_SPEED.shakeReveal;
-    }
-    for (const card of newCards) {
-      const isDraw = game.specialEvents.includes("bomb-pass") ||
-        game.revealed.indexOf(card) >= (game.specialEvents.includes("bomb") ? 3 : 1);
-      const kind = `${side}-${isDraw ? "draw" : "play"}`;
-      const faceDown = isDraw || side === "opponent";
-      schedule({ card, kind, faceUp: !faceDown }, delay);
-      const move = isDraw ? GAME_SPEED.drawMove : side === "player" ? GAME_SPEED.playerPlay : GAME_SPEED.opponentPlay;
-      if (faceDown) schedule({ card, kind, faceUp: true }, delay + move);
-      delay += move + (faceDown ? GAME_SPEED.revealHold : 0);
-    }
-    for (const player of game.players) {
-      const cards = player.captured.filter(card => !before.players[player.seat].captured.some(old => old.id === card.id));
-      if (cards.length) {
-        schedule({ captured: { cards, side: player.seat === you ? "player" : "opponent" } }, delay);
-        delay += GAME_SPEED.captureMove;
-      }
-    }
-    // GO/STOP and manual sync retain the last turn's events; don't replay them.
-    if (newCards.length || game.phase !== before.phase && before.phase === "choose") {
-      for (const event of game.specialEvents) {
-        if (event === "shake") continue; // Public month reveal already displayed above.
-        schedule({ effect: getSpecialEventName(event) }, delay);
-        delay += GAME_SPEED.specialEffect;
-      }
-    }
-    schedule({}, delay);
-  }, [game, you]);
-  return visual;
-}
-
-export default function OnlineGameBoard({ room, game, enabled, message, act, onSync, onLeave }: Props) {
+export default function OnlineGameBoard({ room, game: latestGame, enabled, message, act, onSync, onLeave }: Props) {
+  const { game, visual, animating } = usePresentation(latestGame, room.you);
   const [detail, setDetail] = useState<Seat | null>(null);
   const [prompt, setPrompt] = useState<{ revision: number; cardId: string; type: "bomb" | "shake" } | null>(null);
   const specialPrompt = prompt?.revision === game.revision && game.canPlayHand &&
     game.specialOptions.some(option => option.cardId === prompt.cardId && option.type === prompt.type) ? prompt : null;
   const [expandedPpeokMonth, setExpandedPpeokMonth] = useState<number | null>(null);
-  const visual = usePresentation(game, room.you);
   const mine = game.players[room.you];
   const three = game.mode === "gostop";
   const relativeSeat = (seat: Seat) => (seat - room.you + game.players.length) % game.players.length;
@@ -90,7 +28,6 @@ export default function OnlineGameBoard({ room, game, enabled, message, act, onS
   const name = (seat: Seat) => room.connections[seat].nickname;
   const myTurn = game.turn === room.you;
   const finished = game.phase === "finished";
-  const animating = Boolean(visual.card || visual.captured || visual.effect);
   const canAct = enabled && !animating;
   const selected = detail === null ? null : game.players[detail];
   const result = game.result;
