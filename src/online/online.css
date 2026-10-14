@@ -41,3 +41,136 @@
 .online-room-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .online-page .online-start { background: #ffdf9c; color: #174c36; font-weight: 700; }
 .online-player-connection { display: block; margin-bottom: 4px; }
+/* Online portrait layout. Desktop and offline boards retain their existing styles. */
+@media (max-width: 700px) {
+  .online-page,
+  .online-mode-select {
+    padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  }
+  .online-mode-select .mode-select-content { min-width: 0; width: 100%; }
+  .online-mode-select .mode-select-title h1 { font-size: clamp(24px, 7vw, 36px); }
+  .online-mode-select .mode-card-list { grid-template-columns: minmax(0, 1fr); }
+  .online-mode-entry { padding: 16px; }
+  .online-mode-entry strong { font-size: 18px; }
+  .online-header { gap: 8px; }
+  .online-page h1 { font-size: 20px; }
+  .online-lobby { margin: 18px auto; padding: clamp(12px, 4vw, 20px); min-width: 0; }
+  .online-nickname { flex-wrap: wrap; }
+  .online-lobby input { width: min(100%, 16rem); min-width: 0; font-size: 16px; }
+  .online-lobby select { max-width: 100%; font-size: 16px; }
+  .online-page button { min-height: 44px; }
+  .online-players li { gap: 8px; padding-inline: 0; }
+  .online-players li > div { min-width: 0; }
+  .online-room-code { gap: 8px; }
+
+  .game:is(.online-matgo-game, .online-gostop-game) {
+    --mobile-card-width: clamp(44px, 12.5vw, 56px);
+    --mobile-card-height: calc(var(--mobile-card-width) * 1.45);
+    height: 100dvh;
+    min-height: 100svh;
+    padding: max(8px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: auto auto auto minmax(140px, 1fr) auto auto;
+    grid-template-areas: 'toolbar toolbar' 'opponents opponents' 'opponent-capture opponent-capture' 'table table' 'my-capture my-capture' 'hand hand';
+    gap: 8px;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
+  .game.online-gostop-game {
+    grid-template-areas: 'toolbar toolbar' 'opponents opponents' 'opponent1-capture opponent2-capture' 'table table' 'my-capture my-capture' 'hand hand';
+  }
+  :is(.online-matgo-game, .online-gostop-game) > * { min-width: 0; }
+  :is(.online-matgo-game, .online-gostop-game) .online-game-toolbar {
+    grid-area: toolbar; position: static; max-width: 100%; gap: 6px; font-size: 11px;
+  }
+  :is(.online-matgo-game, .online-gostop-game) .online-game-toolbar button { min-height: 44px; padding: 8px; }
+  :is(.online-matgo-game, .online-gostop-game) .online-room-code { gap: 6px; }
+  :is(.online-matgo-game, .online-gostop-game) .online-code { font-size: 16px; }
+  :is(.online-matgo-game, .online-gostop-game) .opponent-area,
+  .online-gostop-game .gostop3-opponents-area { grid-area: opponents; width: 100%; margin: 0; gap: 6px; align-self: start; }
+  .online-gostop-game .gostop3-opponent-zone { gap: 3px; align-self: start; }
+  :is(.online-matgo-game, .online-gostop-game) :is(.opponent-area, .gostop3-opponent-zone, .player-area) h2 {
+    max-width: 100%; margin: 0; font-size: 14px; overflow-wrap: anywhere;
+  }
+  :is(.online-matgo-game, .online-gostop-game) :is(.opponent-area, .gostop3-opponent-zone, .player-area) p { font-size: 11px; text-align: center; overflow-wrap: anywhere; }
+  :is(.online-matgo-game, .online-gostop-game) .online-player-connection { font-size: 10px; margin: 0; }
+  :is(.online-matgo-game, .online-gostop-game) .card-row { flex-wrap: wrap; gap: 5px; }
+  :is(.online-matgo-game, .online-gostop-game) :is(.card, .card-back) {
+    width: var(--mobile-card-width); height: var(--mobile-card-height); flex: 0 0 auto; font-size: 11px; gap: 2px;
+  }
+  :is(.online-matgo-game, .online-gostop-game) :is(.opponent-area, .gostop3-opponent-zone) .card-back {
+    width: clamp(16px, 4.8vw, 24px); height: clamp(28px, 7vw, 36px);
+  }
+  :is(.online-matgo-game, .online-gostop-game) .player-area { grid-area: hand; gap: 5px; position: relative; padding-top: 2px; }
+  :is(.online-matgo-game, .online-gostop-game) .player-area .card-row { display: grid; grid-template-columns: repeat(auto-fit, var(--mobile-card-width)); }
+  :is(.online-matgo-game, .online-gostop-game) .player-area .card:hover { transform: none; }
+  :is(.online-matgo-game, .online-gostop-game) button:focus-visible { outline: 3px solid #ffdf9c; outline-offset: 2px; }
+  :is(.online-matgo-game, .online-gostop-game) .bomb-pass-button { min-height: 44px; max-width: 100%; margin: 0; }
+
+  :is(.online-matgo-game, .online-gostop-game) .captured-panel {
+    position: static; inset: auto; transform: none; width: 100%; padding: 6px 8px; align-self: stretch; min-height: 52px;
+  }
+  .online-matgo-game .captured-panel--left { grid-area: opponent-capture; }
+  .online-matgo-game .captured-panel--right,
+  .online-gostop-game .gostop3-captured-panel--player { grid-area: my-capture; }
+  .online-gostop-game .gostop3-captured-panel--opponent1 { grid-area: opponent1-capture; }
+  .online-gostop-game .gostop3-captured-panel--opponent2 { grid-area: opponent2-capture; }
+  :is(.online-matgo-game, .online-gostop-game) .captured-panel-header { padding: 0; margin: 0; border: 0; align-items: start; }
+  :is(.online-matgo-game, .online-gostop-game) .captured-panel-header strong { font-size: 11px; overflow-wrap: anywhere; }
+  :is(.online-matgo-game, .online-gostop-game) .captured-panel-header span { flex-shrink: 0; }
+  /* Full card groups and shake records remain available by tapping the summary. */
+  :is(.online-matgo-game, .online-gostop-game) .captured-panel :is(.captured-groups, .captured-badges, .shake-records, .captured-panel-detail-hint) { display: none; }
+  :is(.online-matgo-game, .online-gostop-game) .captured-score { margin: 3px 0 0; padding: 0; border: 0; }
+  :is(.online-matgo-game, .online-gostop-game) .captured-score strong { font-size: 16px; }
+
+  :is(.online-matgo-game, .online-gostop-game) .table { grid-area: table; padding: 4px 0; justify-content: start; min-width: 0; gap: 5px; overflow-y: auto; }
+  :is(.online-matgo-game, .online-gostop-game) .table h2 { margin: 0; font-size: 14px; }
+  :is(.online-matgo-game, .online-gostop-game) :is(.turn-message, .choice-message) { position: static; transform: none; max-width: 100%; font-size: 11px; margin: 0; padding: 4px 8px; text-align: center; white-space: normal; overflow-wrap: anywhere; flex-shrink: 0; }
+  :is(.online-matgo-game, .online-gostop-game) .table-content { width: 100%; min-height: auto; align-items: start; gap: 8px; padding: 8px; }
+  :is(.online-matgo-game, .online-gostop-game) .floor-cards { flex: 1; min-width: 0; grid-template-columns: repeat(auto-fit, minmax(calc(var(--mobile-card-width) + 16px), 1fr)); gap: 12px 4px; justify-items: center; }
+  :is(.online-matgo-game, .online-gostop-game) .floor-card-slot { width: var(--mobile-card-width); height: var(--mobile-card-height); }
+  :is(.online-matgo-game, .online-gostop-game) .draw-pile-area { width: var(--mobile-card-width); position: sticky; top: 0; }
+  :is(.online-matgo-game, .online-gostop-game) .ppeok-stack-slot { width: calc(var(--mobile-card-width) + 16px); height: calc(var(--mobile-card-height) + 56px); }
+  :is(.online-matgo-game, .online-gostop-game) .ppeok-stack-cards { width: calc(var(--mobile-card-width) + 16px); height: calc(var(--mobile-card-height) + 16px); }
+  :is(.online-matgo-game, .online-gostop-game) .ppeok-stack-card { width: var(--mobile-card-width); height: var(--mobile-card-height); }
+  :is(.online-matgo-game, .online-gostop-game) .ppeok-stack-slot.is-open .ppeok-stack-card { left: calc(var(--ppeok-index) * 8px); top: calc(var(--ppeok-index) * 7px); transform: none; }
+  :is(.online-matgo-game, .online-gostop-game) .ppeok-stack-label { max-width: 100%; padding: 2px 4px; border-radius: 6px; flex-direction: column; gap: 1px; font-size: 9px; white-space: normal; text-align: center; overflow-wrap: anywhere; }
+  :is(.online-matgo-game, .online-gostop-game) .ppeok-stack-detail {
+    position: fixed; left: 50%; top: 50%; bottom: auto; width: min(300px, calc(100vw - 32px)); max-height: 70dvh; overflow-y: auto; transform: translate(-50%, -50%); z-index: 450;
+  }
+  :is(.online-matgo-game, .online-gostop-game) .ppeok-stack-slot.is-open .ppeok-stack-detail { transform: translate(-50%, -50%); }
+  :is(.online-matgo-game, .online-gostop-game) .ppeok-stack-detail-cards { flex-wrap: wrap; }
+
+  :is(.online-matgo-game, .online-gostop-game) :is(.go-stop-overlay, .special-action-overlay, .game-over-overlay, .capture-zoom-layer) {
+    padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  }
+  :is(.online-matgo-game, .online-gostop-game) :is(.go-stop-modal, .special-action-modal, .game-over-modal, .capture-zoom-panel) {
+    width: min(100%, 560px); min-width: 0; max-height: 100%; overflow-y: auto; padding: 16px; overflow-wrap: anywhere; overscroll-behavior: contain;
+  }
+  :is(.online-matgo-game, .online-gostop-game) :is(.go-stop-buttons, .special-action-buttons, .game-over-score-board, .gostop3-final-scores) { grid-template-columns: repeat(2, minmax(0, 1fr)); flex-wrap: wrap; }
+  :is(.online-matgo-game, .online-gostop-game) .special-action-buttons { grid-template-columns: minmax(0, 1fr); }
+  :is(.online-matgo-game, .online-gostop-game) :is(.go-stop-buttons, .special-action-buttons) button { min-height: 48px; min-width: 0; }
+  :is(.online-matgo-game, .online-gostop-game) .restart-game-button { min-height: 44px; max-width: 100%; }
+  :is(.online-matgo-game, .online-gostop-game) .capture-zoom-close { width: 44px; height: 44px; }
+  :is(.online-matgo-game, .online-gostop-game) .capture-zoom-header { position: sticky; top: -16px; background: #185339; z-index: 1; padding-top: 8px; }
+  :is(.online-matgo-game, .online-gostop-game) .capture-zoom-header > div { min-width: 0; }
+  :is(.online-matgo-game, .online-gostop-game) .capture-zoom-header h2 { font-size: 16px; }
+  :is(.online-matgo-game, .online-gostop-game) .gostop3-settlement-heading { flex-wrap: wrap; gap: 8px; }
+  :is(.online-matgo-game, .online-gostop-game) .gostop3-settlement-losers { grid-template-columns: minmax(0, 1fr); }
+
+  /* Coordinates come from the rendered hand/table/panel, including scroll offsets. */
+  :is(.online-matgo-game, .online-gostop-game) :is(.animation-layer, .capture-flight-layer) { position: absolute; width: 100%; height: 100%; }
+  :is(.online-matgo-game, .online-gostop-game) :is(.flying-card, .capture-flight) { width: var(--mobile-card-width); height: var(--mobile-card-height); }
+  :is(.online-matgo-game, .online-gostop-game) .flying-card--player-play { --source-x: var(--player-x); --source-y: var(--player-y); animation-name: online-mobile-play; }
+  :is(.online-matgo-game, .online-gostop-game) .flying-card--opponent-play { --source-x: var(--opponent-x); --source-y: var(--opponent-y); animation-name: online-mobile-play; }
+  :is(.online-matgo-game, .online-gostop-game) :is(.flying-card--player-draw, .flying-card--opponent-draw) { --source-x: var(--draw-x); --source-y: var(--draw-y); animation-name: online-mobile-play; }
+  :is(.online-matgo-game, .online-gostop-game) :is(.capture-flight--player, .capture-flight--opponent) { animation-name: online-mobile-capture; }
+  @keyframes online-mobile-play {
+    from { left: var(--source-x); top: var(--source-y); transform: translate(-50%, -50%); }
+    to { left: var(--floor-x); top: var(--floor-y); transform: translate(-50%, -50%); }
+  }
+  @keyframes online-mobile-capture {
+    from { left: var(--floor-x); top: var(--floor-y); transform: translate(-50%, -50%); opacity: 1; }
+    to { left: var(--capture-x); top: var(--capture-y); transform: translate(-50%, -50%) scale(.48); opacity: .2; }
+  }
+}
