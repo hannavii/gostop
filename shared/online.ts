@@ -5,6 +5,9 @@ import type { GostopSettlementResult } from "../src/game/gostopSettlement";
 import type { GameMode } from "../src/game/rules";
 
 export const NICKNAME_MAX_LENGTH = 12;
+export type RoomVisibility = 'private' | 'public';
+export type CreateRoomRequest = { mode: GameMode; nickname: string; visibility: RoomVisibility };
+export type PublicRoomSummary = { roomCode: string; mode: GameMode; playerCount: number; maxPlayers: number };
 export type Seat = 0 | 1 | 2;
 export type GameLogEvent =
   | { type: 'start'; payload: { rematch: boolean } }
@@ -60,6 +63,8 @@ export type RoomView = { code: string; mode: GameMode; capacity: number; you: Se
   game: GameView | null };
 
 export interface ClientEvents {
+  "room:create-options": (request: CreateRoomRequest, ack: Ack) => void;
+  "room:list": (ack: Ack) => void;
   "room:create": (nickname: string, ack: Ack) => void;
   "room:create-mode": (mode: GameMode, nickname: string, ack: Ack) => void;
   "room:join": (code: string, nickname: string, ack: Ack) => void;
@@ -72,6 +77,8 @@ export interface ClientEvents {
   "game:action": (action: GameAction, ack: Ack) => void;
 }
 export interface ServerEvents {
+  "room:list": (rooms: PublicRoomSummary[]) => void;
+  "room:list-changed": () => void;
   "room:session": (session: ReconnectSession) => void;
   "room:state": (view: RoomView) => void;
   "room:closed": (reason: string) => void;

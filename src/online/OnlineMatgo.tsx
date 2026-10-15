@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { NICKNAME_MAX_LENGTH } from "../../shared/online";
 import RoomCode from "./RoomCode";
 import OnlineGameBoard from "./OnlineGameBoard";
+import PublicRoomList from './PublicRoomList';
 import ConnectionStatus, { ReconnectNotice } from "./ConnectionStatus";
 import { acceptRoomState, boardPresentationKey } from "./roomState";
-import type { ClientEvents, GameAction, Reply, RoomView, ServerEvents } from "../../shared/online";
+import type { ClientEvents, GameAction, Reply, RoomView, RoomVisibility, ServerEvents } from "../../shared/online";
 import "./online.css";
 import type { GameMode } from "../game/rules";
 import { clearReconnectSession, readReconnectSession, saveReconnectSession } from "./reconnectSession";
@@ -14,9 +15,12 @@ import { clearRoomInvite, INVALID_INVITE_MESSAGE, readRoomInvite } from './invit
 type OnlineSocket = Socket<ServerEvents, ClientEvents>;
 export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
   const socketRef = useRef<OnlineSocket | null>(null);
+  const getSocket = useCallback(() => socketRef.current, []);
   const sending = useRef(false);
   const sessionRef = useRef(readReconnectSession());
+  const [hasSession, setHasSession] = useState(() => readReconnectSession() !== null);
   const [invite] = useState(() => readRoomInvite(window.location.search));
+  const [invitePending, setInvitePending] = useState(invite.present);
   const [presentationEpoch, setPresentationEpoch] = useState(0);
   const [connected, setConnected] = useState(false);
   const [restoring, setRestoring] = useState(false);
@@ -26,6 +30,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
   const [nickname, setNickname] = useState("");
   const [code, setCode] = useState(invite.code ?? "");
   const [mode, setMode] = useState<GameMode>("matgo");
+  const [visibility, setVisibility] = useState<RoomVisibility>('private');
   const [message, setMessage] = useState("서버에 연결하는 중입니다.");
 
   useEffect(() => {
@@ -46,6 +51,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
         setRestoring(false);
         if (!reply.ok) {
           sessionRef.current = null;
+          setHasSession(false);
           clearReconnectSession();
           setRoom(null);
           setMessage(reply.error);
@@ -81,17 +87,20 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
     });
     socket.on("room:state", view => {
       clearRoomInvite();
+      setInvitePending(false);
       if (resetPresentation) { setPresentationEpoch(epoch => epoch + 1); resetPresentation = false; }
       setRoom(previous => acceptRoomState(previous, view));
       setMessage("");
     });
     socket.on("room:session", session => {
       sessionRef.current = session;
+      setHasSession(true);
       setStorageWarning(saveReconnectSession(session) ? "" : "브라우저 저장소를 사용할 수 없어 새로고침 복구가 불가능합니다.");
     });
     socket.on("room:closed", reason => {
       clearTimeout(retry);
       sessionRef.current = null;
+      setHasSession(false);
       clearReconnectSession();
       setRestoring(false); setStorageWarning(""); setRoom(null); setMessage(reason);
     });
@@ -171,8 +180,13 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
           <select id="online-mode" value={mode} disabled={!enabled} onChange={event => setMode(event.target.value as GameMode)}>
             <option value="matgo">2인 맞고</option><option value="gostop">3인 고스톱</option>
           </select>
+          <label htmlFor="online-visibility">방 공개 설정 </label>
+          <select id="online-visibility" value={visibility} disabled={!enabled}
+            onChange={event => setVisibility(event.target.value as RoomVisibility)}>
+            <option value="private">비공개</option><option value="public">공개</option>
+          </select>
           <button type="button" disabled={!enabled || !validNickname}
-            onClick={() => void request(s => s.timeout(5000).emitWithAck("room:create-mode", mode, nickname.trim()))}>방 만들기</button>
+            onClick={() => void request(s => s.timeout(5000).emitWithAck("room:create-options", { mode, nickname: nickname.trim(), visibility }))}>방 만들기</button>
           <form onSubmit={event => {
             event.preventDefault();
             if (validNickname) void request(s => s.timeout(5000).emitWithAck("room:join", code.trim().toUpperCase(), nickname.trim()));
@@ -182,6 +196,9 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
               onChange={event => setCode(event.target.value.toUpperCase())} placeholder="6자리 코드" />
             <button disabled={!enabled || !validNickname || !/^[A-Z0-9]{6}$/.test(code.trim())}>참가하기</button>
           </form>
+          {!restoring && !hasSession && !invitePending && <PublicRoomList getSocket={getSocket}
+            connected={connected} enabled={enabled} validNickname={validNickname}
+            onJoin={roomCode => request(s => s.timeout(5000).emitWithAck('room:join', roomCode, nickname.trim()))} />}
           <p>같은 탭에서 새로고침하거나 일시적으로 연결이 끊겨도 60초 안에 같은 좌석으로 복구할 수 있습니다. 대기실에서 나가면 남은 플레이어는 계속 기다립니다. 게임 중 나가면 방이 종료됩니다.</p>
         </section>
       ) : (

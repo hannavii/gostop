@@ -234,3 +234,13 @@
 @media (max-width: 700px) {
   .online-reconnect-notice { padding: 5px 6px; font-size: 10px; }
 }
+.online-public-rooms { margin-top: 24px; border-top: 1px solid #ffffff35; padding-top: 12px; text-align: left; min-width: 0; }
+.online-public-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.online-public-heading h3 { margin: 8px 0; }
+.online-public-list { list-style: none; padding: 0; margin: 12px 0; }
+.online-public-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; border: 1px solid #ffffff35; border-radius: 10px; padding: 12px; margin-top: 8px; }
+.online-public-list li > div { flex: 1; min-width: 7rem; overflow-wrap: anywhere; }
+.online-public-code { display: block; font-size: 12px; letter-spacing: .08em; margin-top: 4px; }
+.online-public-list li > span { white-space: nowrap; }
+.online-public-list button { min-height: 44px; flex-shrink: 0; }
+.online-public-error { color: #ffdf9c; }
