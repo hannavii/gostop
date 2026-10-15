@@ -10,7 +10,7 @@
     "start:server": "node --env-file-if-exists=.env dist/server/index.mjs",
     "typecheck": "tsc -b && tsc -p server/tsconfig.json",
     "build:server": "tsc -p server/tsconfig.json && esbuild server/index.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/server/index.mjs",
-    "test:online": "tsx --test server/tests/turnTimer.test.ts server/tests/deployment.test.ts server/tests/game.test.ts server/tests/gostop.test.ts server/tests/socket.test.ts server/tests/reconnect.test.ts server/tests/rematch.test.ts && tsx --tsconfig tsconfig.app.json --test tests/reconnect-ui.test.ts tests/turn-countdown.test.ts tests/online-ui.test.ts tests/reconnect-session.test.ts tests/online-presentation.test.ts",
+    "test:online": "tsx --test server/tests/turnTimer.test.ts server/tests/deployment.test.ts server/tests/game.test.ts server/tests/gostop.test.ts server/tests/socket.test.ts server/tests/reconnect.test.ts server/tests/rematch.test.ts && tsx --tsconfig tsconfig.app.json --test tests/online-settlement.test.ts tests/reconnect-ui.test.ts tests/turn-countdown.test.ts tests/online-ui.test.ts tests/reconnect-session.test.ts tests/online-presentation.test.ts",
     "test:browser-rematch": "node --import tsx tests/browser-reconnect.mjs --rematch",
     "test:browser-mobile": "node --import tsx tests/browser-reconnect.mjs --mobile",
     "test:browser-reconnect": "node --import tsx tests/browser-reconnect.mjs",

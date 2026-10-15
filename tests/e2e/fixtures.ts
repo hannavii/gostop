@@ -9,8 +9,9 @@ import { TurnTimer } from '../../server/turnTimer';
 import { hwatuCards } from '../../src/data/cards';
 import { GAME_RULES, type GameMode } from '../../src/game/rules';
 import type { RoomView } from '../../shared/online';
+import { settlementMatch } from '../settlement-fixture';
 
-type Scenario = 'normal' | 'timer' | 'rematch' | 'reconnect' | 'reconnect-expiry';
+type Scenario = 'normal' | 'timer' | 'rematch' | 'reconnect' | 'reconnect-expiry' | 'settlement';
 export type Peer = { page: Page; context: BrowserContext; view: RoomView | null };
 type Fixtures = {
   scenario: Scenario;
@@ -72,7 +73,8 @@ export const test = base.extend<Fixtures>({
     const server = createOnlineServer({
       reconnectGraceMs: scenario === 'reconnect-expiry' ? 1800 : scenario === 'reconnect' ? 12_000 : undefined,
       connectionPolicy: { allowedOrigins, allowMissingOrigin: false },
-      matchFactory: (mode = "matgo") => fixedMatch(mode, scenario === 'rematch' && deals++ === 0),
+      matchFactory: (mode = "matgo") => scenario === 'settlement' && deals++ === 0
+        ? settlementMatch(mode) : fixedMatch(mode, scenario === 'rematch' && deals++ === 0),
       turnTimerFactory: () => scenario === 'timer' ? new TurnTimer(2500) : new TurnTimer(),
     });
     let vite: Awaited<ReturnType<typeof createServer>> | undefined;
@@ -144,7 +146,7 @@ export async function startRoom(peers: Peer[]) {
 
 export async function noOverflow(page: Page) {
   await expect.poll(() => page.evaluate(() => {
-    const selectors = '.online-page, .online-game-toolbar, .online-reconnect-notice, .online-player-connection, .player-area, .table, .go-stop-modal, .game-over-modal';
+    const selectors = '.online-page, .online-game-toolbar, .online-reconnect-notice, .online-player-connection, .player-area, .table, .go-stop-modal, .game-over-modal, .capture-zoom-panel, .online-settlement-detail';
     return document.documentElement.scrollWidth <= innerWidth + 1 &&
       [...document.querySelectorAll(selectors)].filter(e => e.getClientRects().length).every(e => {
         const r = e.getBoundingClientRect(); return r.left >= -1 && r.right <= innerWidth + 1;

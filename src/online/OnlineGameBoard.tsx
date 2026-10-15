@@ -10,6 +10,7 @@ import MatgoTable from "../components/MatgoTable";
 import { GAME_SPEED_STYLE } from "../components/matgoSpeed";
 import { usePresentation } from "./usePresentation";
 import GostopOnlineSettlement from "./GostopOnlineSettlement";
+import MatgoOnlineSettlement from "./MatgoOnlineSettlement";
 
 type Props = {
   room: RoomView; game: GameView; enabled: boolean; message: string;
@@ -166,16 +167,15 @@ export default function OnlineGameBoard({ room, game: latestGame, enabled, messa
     {result && !animating && <div className="game-over-overlay"><div className="game-over-modal">
       <div className="game-over-label">게임 종료</div>
       <h2>{result.winner === "draw" ? "나가리 · 무승부" : result.winner === room.you ? "승리!" : `${name(result.winner)} 승리`}</h2>
-      {three ? <div className="gostop3-final-scores">{[mine, ...opponents].map(p =>
-        <div key={p.seat}><span>{name(p.seat)} 점수</span><strong>{p.score}점</strong><small>{p.goCount} GO</small></div>)}</div>
-        : <div className="game-over-score-board"><span>내 점수 {mine.score}점</span><span>{name(opponents[0].seat)} 점수 {opponents[0].score}점</span></div>}
       {result.gostopSettlement && <GostopOnlineSettlement settlement={result.gostopSettlement} name={name} />}
-      {settlement && <div className="settlement-board">
-        <div className="settlement-row"><span>기본 점수</span><strong>{settlement.baseScore}점</strong></div>
-        <div className="settlement-row"><span>GO 추가 점수</span><strong>+{settlement.goBonus}점</strong></div>
-        <div className="settlement-multipliers">{settlement.multipliers.map(item => <div key={item.id} className="settlement-multiplier"><span>{item.label}</span><strong>×{item.multiplier}</strong></div>)}</div>
-        <div className="settlement-total"><span>최종 정산 점수</span><strong>{settlement.finalScore}점</strong></div>
-      </div>}
+      {settlement && result.winner !== "draw" && <MatgoOnlineSettlement settlement={settlement}
+        winner={name(result.winner)} loser={name(game.players.find(p => p.seat !== result.winner)!.seat)} />}
+      {three ? <div className="gostop3-final-scores">{[mine, ...opponents].map(p =>
+        <div key={p.seat}><span>{name(p.seat)} · {result.winner === "draw" ? "무승부" : p.seat === result.winner ? "승자" : "패자"}</span><strong>{p.score}점</strong><small>{p.goCount} GO</small></div>)}</div>
+        : <div className="game-over-score-board"><span>내 점수 {mine.score}점</span><span>{name(opponents[0].seat)} 점수 {opponents[0].score}점</span></div>}
+      <section className="online-result-captured" aria-label="최종 획득패">
+        {[mine, ...opponents].map(p => <button key={p.seat} onClick={() => setDetail(p.seat)}>{name(p.seat)} 획득패 보기</button>)}
+      </section>
       <section className="rematch-status" aria-label="다시하기 동의 상태" aria-live="polite">
         <p>모두 다시하기에 동의하고 접속하면 같은 방에서 새 판을 시작합니다.</p>
         <ul>{room.connections.map(player => <li key={player.seat}>

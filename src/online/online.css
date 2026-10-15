@@ -205,6 +205,18 @@
 .online-reconnect-notice .online-player-connection { display: inline; margin: 0; font: inherit; }
 .online-reconnect-seconds { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .online-player-connection { max-width: 100%; overflow-wrap: anywhere; }
+.online-settlement-detail { text-align: left; overflow-wrap: anywhere; min-width: 0; }
+.online-settlement-detail h3 { font-size: 14px; margin: 14px 0 8px; }
+.online-score-details dl { margin: 0; }
+.online-score-details dl > div { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; }
+.online-score-details dt { min-width: 0; }
+.online-score-details dd { margin: 0; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.online-score-subtotal { border-top: 1px solid #ffffff30; font-weight: bold; }
+.online-score-details p, .online-settlement-formula { font-size: 12px; line-height: 1.5; }
+.online-result-captured { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+.online-result-captured button { min-height: 44px; min-width: 0; max-width: 100%; padding: 8px 12px; border: 1px solid #ffffff50; border-radius: 8px; background: #174c36; color: white; font: inherit; cursor: pointer; overflow-wrap: anywhere; }
+.online-settlement-detail .gostop3-settlement-loser { min-width: 0; }
+.online-settlement-detail .gostop3-settlement-loser-name { flex-wrap: wrap; gap: 6px; }
 .rematch-status .online-player-connection { font-weight: normal; }
 @media (max-width: 700px) {
   .online-reconnect-notice { padding: 5px 6px; font-size: 10px; }
