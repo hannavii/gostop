@@ -6,6 +6,12 @@ React + TypeScript + Vite 기반 화투 게임입니다. 기존 2인 맞고·3�
 
 서버 구조와 규칙은 [온라인 맞고 문서](docs/online-matgo.md)와 [온라인 3인 고스톱 문서](docs/online-gostop.md), 현재 시작 절차는 [대기실 문서](docs/online-lobby.md)를 참고하세요. 새로고침·일시적 연결 종료는 같은 서버 프로세스에서 60초 유예 동안 좌석을 복구합니다. 자세한 정책은 [재접속 문서](docs/online-reconnect.md), production 환경변수와 빌드·배포는 [배포 문서](docs/deployment.md)에 정리했습니다.
 
+## 온라인 E2E
+
+최초 `npm run test:e2e:install` 후 `npm run test:e2e`로 Playwright 멀티플레이 테스트를 실행합니다.
+테스트가 서버와 Vite를 자동으로 시작·종료합니다. 시나리오와 CI 실행 방법은
+[온라인 E2E 문서](docs/online-e2e.md)를 참고하세요.
+
 ## Vite 템플릿 참고
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.

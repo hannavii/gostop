@@ -79,7 +79,7 @@ export default function OnlineGameBoard({ room, game: latestGame, enabled, messa
   const turnMessage = message || (finished ? "게임이 끝났습니다." : !myTurn
     ? game.phase === "choose" ? `${name(game.turn)}님이 바닥패를 선택하고 있습니다.` : game.phase === "go-stop" ? `${name(game.turn)}님이 GO / STOP을 선택하고 있습니다.` : `${name(game.turn)}님 차례입니다.`
     : game.phase === "play" ? game.canPlayHand ? "낼 카드를 선택하세요." : "남은 폭탄 패스를 사용하세요." : "");
-  return <main ref={boardRef} className={`game ${three ? "gostop3-game online-gostop-game" : "online-matgo-game"} ${animating ? "is-animating" : ""}`} style={GAME_SPEED_STYLE}>
+  return <main data-testid="online-board" data-seat={room.you} data-turn={latestGame.turn} data-revision={latestGame.revision} data-round={room.round} ref={boardRef} className={`game ${three ? "gostop3-game online-gostop-game" : "online-matgo-game"} ${animating ? "is-animating" : ""}`} style={GAME_SPEED_STYLE}>
     <nav className="online-game-toolbar" aria-label="방 정보">
       <RoomCode code={room.code} />
       {room.turnTimer && <TurnCountdown timer={room.turnTimer} name={room.connections[room.turnTimer.timedPlayerSeat].nickname} />}
@@ -133,7 +133,7 @@ export default function OnlineGameBoard({ room, game: latestGame, enabled, messa
     <section className={`player-area${three ? " gostop3-player-area" : ""}`}>
       <h2>{room.you === room.host && <span aria-label="방장">👑 </span>}{name(room.you)} (나){myTurn && !finished && " ◀"}</h2>
       <small>{room.connections[room.you].connected ? "접속 중" : "재접속 대기"}</small>
-      <div className={`card-row${three ? " gostop3-player-hand" : ""}`} aria-label="내 손패">{game.hand.map(card => <Card key={card.id} card={card}
+      <div data-testid="own-hand" className={`card-row${three ? " gostop3-player-hand" : ""}`} aria-label="내 손패">{game.hand.map(card => <Card key={card.id} card={card}
         onClick={canAct && game.canPlayHand && !specialPrompt ? () => {
           const option = game.specialOptions.find(option => option.cardId === card.id);
           if (option) setPrompt({ ...option, revision: game.revision });
