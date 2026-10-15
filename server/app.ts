@@ -1,11 +1,11 @@
-import { RequestError, REQUEST_FAILED, validateNickname, validateReconnect, validateRematch } from './validation';
+import { RequestError, REQUEST_FAILED, validateCreateRoom, validateNickname, validateReconnect, validateRematch } from './validation';
 import { TurnTimer } from "./turnTimer";
 import { GameLog } from './gameLog';
 import express from "express";
 import { createServer } from "node:http";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { Server } from "socket.io";
-import type { Ack, ClientEvents, ServerEvents, Seat, Reply } from "../shared/online";
+import type { Ack, ClientEvents, ServerEvents, Seat, Reply, RoomVisibility, PublicRoomSummary } from "../shared/online";
 import { applyAction, createMatch, gameView, parseAction, type Match } from "./game";
 import { GAME_RULES, type GameMode } from "../src/game/rules";
 import { readServerConfig } from "./config";
@@ -13,7 +13,7 @@ import { readServerConfig } from "./config";
 export const RECONNECT_GRACE_MS = 60_000;
 type Member = { nickname: string; ready: boolean; rematchReady: boolean; socketId: string | null; tokenHash: Buffer; deadline: number | null;
   timer: ReturnType<typeof setTimeout> | null };
-type Room = { code: string; mode: GameMode; members: Member[]; host: Member | null; match: Match | null; round: number; turnTimer: TurnTimer; log: GameLog };
+type Room = { code: string; mode: GameMode; visibility: RoomVisibility; createdSequence: number; members: Member[]; host: Member | null; match: Match | null; round: number; turnTimer: TurnTimer; log: GameLog };
 const hashToken = (token: string) => createHash("sha256").update(token).digest();
 
 export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matchFactory = createMatch,
@@ -43,7 +43,27 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
   });
   const rooms = new Map<string, Room>();
   const membership = new Map<string, string>();
+  const listWatchers = new Set<string>();
+  let roomSequence = 0;
+  let listSignature = '[]';
   app.get("/health", (_req, res) => { res.json({ ok: true }); });
+
+  function publicRooms(): PublicRoomSummary[] {
+    const now = Date.now();
+    return [...rooms.values()].filter(room => room.visibility === 'public' && !room.match &&
+      room.members.length > 0 && room.members.length < GAME_RULES[room.mode].playerCount &&
+      room.members.every(member => member.deadline === null || member.deadline > now))
+      .sort((a, b) => b.createdSequence - a.createdSequence)
+      .map(room => ({ roomCode: room.code, mode: room.mode, playerCount: room.members.length,
+        maxPlayers: GAME_RULES[room.mode].playerCount }));
+  }
+  function notifyPublicRooms() {
+    const signature = JSON.stringify(publicRooms());
+    // Private lifecycle changes must not reveal even a room's existence.
+    if (signature === listSignature) return;
+    listSignature = signature;
+    if (listWatchers.size) io.to([...listWatchers]).emit('room:list-changed');
+  }
 
   function diagnose(operation: string, error: unknown) {
     // Fingerprints correlate failures without logging messages, stacks or credentials.
@@ -117,6 +137,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
         io.to(member.socketId).emit("room:closed", reason);
       }
     }
+    notifyPublicRooms();
   }
 
   function removeMember(room: Room, member: Member, reason: string) {
@@ -128,9 +149,10 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       io.to(member.socketId).emit("room:closed", reason);
     }
     room.members = room.members.filter(m => m !== member);
-    if (!room.members.length) { rooms.delete(room.code); return; }
+    if (!room.members.length) { rooms.delete(room.code); notifyPublicRooms(); return; }
     if (room.host === member) room.host = room.members[0];
     publish(room);
+    notifyPublicRooms();
   }
 
   function activeRoom(code: string) {
@@ -155,7 +177,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       room.turnTimer.cancel();
       for (const member of room.members) if (member.timer) clearTimeout(member.timer);
     }
-    rooms.clear(); membership.clear();
+    rooms.clear(); membership.clear(); listWatchers.clear();
   });
 
   io.on("connection", socket => {
@@ -163,6 +185,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       ['room:create', 1], ['room:create-mode', 2], ['room:join', 2], ['room:resume', 1],
       ['room:ready', 1], ['room:start', 0], ['room:leave', 0], ['room:sync', 0],
       ['game:rematch', 1], ['game:action', 1],
+      ['room:create-options', 1], ['room:list', 0],
     ]);
     // Socket.IO supplies the acknowledgement as the last argument. Reject extra
     // positional fields before the typed listeners can misinterpret that callback.
@@ -200,24 +223,34 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       room.members.push({ nickname: name, ready: false, rematchReady: false, socketId: socket.id, tokenHash: hashToken(token), deadline: null, timer: null });
       room.host ??= room.members[0];
       membership.set(socket.id, room.code);
+      listWatchers.delete(socket.id);
       // Credentials go only to their owner, never in a public room snapshot.
       socket.emit("room:session", { roomCode: room.code, token });
     }
-    function createRoom(mode: GameMode, input: string, ack: Ack) { handle(ack, 'room:create', () => {
+    function createRoom(mode: GameMode, input: string, visibility: RoomVisibility = 'private') {
       if (mode !== "matgo" && mode !== "gostop") throw new RequestError("지원하지 않는 게임 모드입니다.");
       requireLobby();
       const name = validateNickname(input);
       if (rooms.size >= 1000) throw new RequestError("현재 생성 가능한 방이 가득 찼습니다.");
       let code: string;
       do { code = randomInt(0, 36 ** 6).toString(36).toUpperCase().padStart(6, "0"); } while (rooms.has(code));
-      const room: Room = { code, mode, members: [], host: null, match: null, round: 0, turnTimer: turnTimerFactory(), log: new GameLog(code) };
+      const room: Room = { code, mode, visibility, createdSequence: ++roomSequence, members: [], host: null, match: null, round: 0, turnTimer: turnTimerFactory(), log: new GameLog(code) };
       rooms.set(code, room);
       addMember(room, name);
       publish(room);
-    }); }
+      notifyPublicRooms();
+    }
     // Both creation events require a validated nickname.
-    socket.on("room:create", (name, ack) => createRoom("matgo", name, ack));
-    socket.on("room:create-mode", (mode, name, ack) => createRoom(mode, name, ack));
+    socket.on("room:create", (name, ack) => handle(ack, 'room:create', () => createRoom("matgo", name)));
+    socket.on("room:create-mode", (mode, name, ack) => handle(ack, 'room:create-mode', () => createRoom(mode, name)));
+    socket.on('room:create-options', (input, ack) => handle(ack, 'room:create-options', () => {
+      const options = validateCreateRoom(input);
+      createRoom(options.mode, options.nickname, options.visibility);
+    }));
+    socket.on('room:list', ack => handle(ack, 'room:list', () => {
+      socket.emit('room:list', publicRooms());
+      if (!membership.has(socket.id)) listWatchers.add(socket.id);
+    }));
     socket.on("room:join", (input, nameInput, ack) => handle(ack, 'room:join', () => {
       requireLobby();
       const name = validateNickname(nameInput);
@@ -228,6 +261,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       if (room.members.length >= capacity || room.match) throw new RequestError("방이 가득 찼습니다.");
       addMember(room, name);
       publish(room);
+      notifyPublicRooms();
     }));
     socket.on("room:resume", (input, ack) => handle(ack, 'room:resume', () => {
       input = validateReconnect(input);
@@ -252,6 +286,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       member.socketId = socket.id;
       member.deadline = null; member.timer = null;
       membership.set(socket.id, room.code);
+      listWatchers.delete(socket.id);
       // Stable token makes retries safe even if the previous acknowledgement was lost.
       socket.emit("room:session", { roomCode: room.code, token: input.token });
       if (reconnecting && room.match) room.log.append(room.match.revision, {
@@ -279,6 +314,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       room.round++;
       room.log = log;
       publish(room);
+      notifyPublicRooms();
     }));
     socket.on("room:leave", ack => handle(ack, 'room:leave', () => {
       const room = currentRoom();
@@ -308,6 +344,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       publish(room);
     }));
     socket.on("disconnect", () => {
+      listWatchers.delete(socket.id);
       const code = membership.get(socket.id);
       membership.delete(socket.id);
       const room = code ? rooms.get(code) : undefined;
