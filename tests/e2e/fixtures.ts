@@ -17,6 +17,7 @@ type Fixtures = {
   scenario: Scenario;
   site: string;
   peers: Peer[];
+  openPeer: (url?: string) => Promise<Peer>;
   createRoom: (mode: GameMode, options?: { start?: boolean }) => Promise<Peer[]>;
 };
 
@@ -103,13 +104,19 @@ export const test = base.extend<Fixtures>({
     try { await provide(peers); }
     finally { await Promise.all(peers.map(peer => peer.context.close())); }
   },
-  createRoom: async ({ browser, viewport, isMobile, hasTouch, site, peers }, provide) => {
+  openPeer: async ({ browser, viewport, isMobile, hasTouch, site, peers }, provide) => {
+    await provide(async (url = site) => {
+      const context = await browser.newContext({ viewport, isMobile, hasTouch });
+      const page = await context.newPage();
+      const peer: Peer = { page, context, view: null }; peers.push(peer); observe(peer);
+      await page.goto(url);
+      return peer;
+    });
+  },
+  createRoom: async ({ openPeer, peers }, provide) => {
     await provide(async (mode, { start = true } = {}) => {
       for (let seat = 0; seat < GAME_RULES[mode].playerCount; seat++) {
-        const context = await browser.newContext({ viewport, isMobile, hasTouch });
-        const page = await context.newPage();
-        const peer: Peer = { page, context, view: null }; peers.push(peer); observe(peer);
-        await page.goto(site);
+        const peer = await openPeer(), page = peer.page;
         await page.locator('.online-mode-entry').click();
         await expect(page.getByLabel('닉네임', { exact: true })).toBeEnabled();
         await page.getByLabel('닉네임', { exact: true }).fill(`친구${seat}`);

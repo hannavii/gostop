@@ -9,12 +9,14 @@ import type { ClientEvents, GameAction, Reply, RoomView, ServerEvents } from "..
 import "./online.css";
 import type { GameMode } from "../game/rules";
 import { clearReconnectSession, readReconnectSession, saveReconnectSession } from "./reconnectSession";
+import { clearRoomInvite, INVALID_INVITE_MESSAGE, readRoomInvite } from './inviteUrl';
 
 type OnlineSocket = Socket<ServerEvents, ClientEvents>;
 export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
   const socketRef = useRef<OnlineSocket | null>(null);
   const sending = useRef(false);
   const sessionRef = useRef(readReconnectSession());
+  const [invite] = useState(() => readRoomInvite(window.location.search));
   const [presentationEpoch, setPresentationEpoch] = useState(0);
   const [connected, setConnected] = useState(false);
   const [restoring, setRestoring] = useState(false);
@@ -22,7 +24,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
   const [busy, setBusy] = useState(false);
   const [room, setRoom] = useState<RoomView | null>(null);
   const [nickname, setNickname] = useState("");
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState(invite.code ?? "");
   const [mode, setMode] = useState<GameMode>("matgo");
   const [message, setMessage] = useState("서버에 연결하는 중입니다.");
 
@@ -58,7 +60,11 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
       resetPresentation = true;
       setConnected(true);
       if (sessionRef.current) void restore();
-      else { setRestoring(false); setMessage("방을 만들거나 방 코드로 참가하세요."); }
+      else {
+        setRestoring(false);
+        setMessage(invite.present && !invite.code ? INVALID_INVITE_MESSAGE
+          : invite.code ? "초대받은 방 코드를 확인하고 닉네임을 입력해 참가하세요." : "방을 만들거나 방 코드로 참가하세요.");
+      }
     });
     socket.on("disconnect", reason => {
       clearTimeout(retry);
@@ -74,6 +80,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
       setMessage("서버에 연결할 수 없습니다. 서버 실행 상태를 확인해주세요.");
     });
     socket.on("room:state", view => {
+      clearRoomInvite();
       if (resetPresentation) { setPresentationEpoch(epoch => epoch + 1); resetPresentation = false; }
       setRoom(previous => acceptRoomState(previous, view));
       setMessage("");
@@ -96,7 +103,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, []);
+  }, [invite]);
 
   async function request(work: (socket: OnlineSocket) => Promise<Reply>) {
     const socket = socketRef.current;
@@ -141,7 +148,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
     <main className="online-page">
       <header className="online-header">
         <button type="button" disabled={busy || restoring || !!room && !connected} onClick={() => {
-          if (!room) onBack();
+          if (!room) { clearRoomInvite(); onBack(); }
           else void request(async s => {
             const reply = await s.timeout(5000).emitWithAck("room:leave");
             if (reply.ok) onBack();
@@ -180,7 +187,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
       ) : (
         <section className="online-lobby online-waiting-room">
           <h2>온라인 {room.mode === "gostop" ? "3인 고스톱" : "2인 맞고"}</h2>
-          <RoomCode code={room.code} />
+          <RoomCode code={room.code} invite />
           <ReconnectNotice connections={room.connections} />
           <h3>플레이어 <small>{room.occupancy}/{room.capacity}명</small></h3>
           <ul className="online-players">
