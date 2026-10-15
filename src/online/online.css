@@ -191,3 +191,8 @@
   .rematch-actions button { min-width: 0; width: 100%; padding: 10px; }
   .online-matgo-game .game-over-modal { max-height: 100%; }
 }
+
+.online-turn-timer { display: inline-flex; gap: 6px; align-items: center; min-width: 0; max-width: 100%; padding: 3px 8px; border-radius: 8px; background: #173d32; color: #fff; font-size: 12px; }
+.online-turn-timer > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.online-turn-timer strong { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.online-turn-timer.is-urgent { background: #8d271d; outline: 2px solid #ffc770; }

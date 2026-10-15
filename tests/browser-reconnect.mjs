@@ -95,9 +95,10 @@ try {
   const ready = session => until(() => evaluate(session, `!!document.querySelector('#online-mode:not(:disabled)')`), 'connected lobby');
   const storage = session => evaluate(session, `JSON.parse(sessionStorage.getItem('gostop.online.reconnect'))`);
 
+  const timerSuite = process.argv.includes('--timer');
   const mobileSuite = process.argv.includes('--mobile');
   const rematchSuite = process.argv.includes('--rematch');
-  const sizes = rematchSuite ? [[360, 800], [1440, 900]] : mobileSuite ? [[360, 800], [375, 812], [390, 844], [412, 915], [1440, 900]] : [[1440, 900]];
+  const sizes = timerSuite ? [[360, 800]] : rematchSuite ? [[360, 800], [1440, 900]] : mobileSuite ? [[360, 800], [375, 812], [390, 844], [412, 915], [1440, 900]] : [[1440, 900]];
   for (const [width, height] of sizes) for (const mode of ['matgo', 'gostop']) {
     const count = mode === 'gostop' ? 3 : 2;
     const contexts = [], sessions = [];
@@ -262,6 +263,22 @@ try {
     await delay(150);
     await evaluate(actor, `[...document.querySelectorAll('button')].find(b=>b.textContent==='그냥 한 장 내기')?.click()`);
     await until(() => sessions.every(s => views.get(s)?.game?.revision > state.revision), 'continued game synchronized');
+    if (timerSuite) {
+      const beforeTimer = views.get(sessions[0]);
+      const revision = beforeTimer.game.revision;
+      assert.ok(beforeTimer.turnTimer);
+      for (const session of sessions) {
+        await until(() => evaluate(session, `!!document.querySelector('.online-turn-timer')`), 'timer visible');
+        const rect = await evaluate(session, `(() => { const r=document.querySelector('.online-turn-timer').getBoundingClientRect(); return [r.left,r.right]; })()`);
+        assert.ok(rect[0] >= 0 && rect[1] <= width);
+        assert.equal(views.get(session).turnTimer.turnDeadline, beforeTimer.turnTimer.turnDeadline);
+      }
+      const initial = await evaluate(sessions[0], `document.querySelector('.online-turn-timer strong').textContent`);
+      await until(async () => (await evaluate(sessions[0], `document.querySelector('.online-turn-timer strong').textContent`)) !== initial, 'countdown decreases');
+      await until(() => sessions.every(s => views.get(s)?.game?.revision > revision), 'server timeout auto action', 45000);
+      await until(() => evaluate(sessions[0], `!document.querySelector('.is-animating')`), 'automatic action presentation');
+      console.log(`PASS ${mode}: shared deadline, decreasing countdown, real 30s automatic action and presentation at 360px.`);
+    }
     if (mobileSuite && width <= 700) {
       await until(() => evaluate(sessions[0], `!document.querySelector('.is-animating')`), 'continued animation complete');
       await checkMobileStates({ evaluate, rpc, until, session: sessions[0], mode, width, height });

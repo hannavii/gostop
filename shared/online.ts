@@ -12,6 +12,7 @@ export type GameAction = {
   type: "play" | "bomb" | "shake" | "bomb-pass" | "choose" | "go" | "stop";
   cardId?: string;
 };
+export type TurnTimerView = { turnDeadline: number; startsAt: number; timedPlayerSeat: Seat; decisionPhase: Exclude<GameView["phase"], "finished"> };
 export type RematchRequest = { roomCode: string; round: number; ready: boolean };
 export type Reply = { ok: true } | { ok: false; error: string };
 export type Ack = (reply: Reply) => void;
@@ -40,6 +41,7 @@ export type GameView = {
 };
 export type RoomView = { code: string; mode: GameMode; capacity: number; you: Seat; occupancy: number;
   host: Seat; round: number;
+  turnTimer?: TurnTimerView | null;
   connections: { seat: Seat; nickname: string; ready: boolean; rematchReady: boolean; connected: boolean; reconnectDeadline: number | null }[];
   game: GameView | null };
 
