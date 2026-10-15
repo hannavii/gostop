@@ -4,6 +4,21 @@ import { TurnTimer, TURN_TIMEOUT_MS, timeoutAction } from '../turnTimer';
 import { applyAction, createMatch, gameView } from '../game';
 import { hwatuCards } from '../../src/data/cards';
 
+test('timer injection is per instance; production default stays 30 seconds', t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
+  const short = new TurnTimer(2500), standard = new TurnTimer();
+  const match = createMatch(), connected = [true, true];
+  let calls = 0;
+  short.sync(match, connected, () => calls++);
+  standard.sync(match, connected, () => calls++);
+  assert.equal(short.view!.turnDeadline, 3500);
+  assert.equal(standard.view!.turnDeadline, 31_000);
+  t.mock.timers.tick(2500); assert.equal(calls, 1);
+  short.cancel(); standard.cancel();
+  for (const invalid of [0, -1, 0.5, NaN, Infinity]) assert.throws(() => new TurnTimer(invalid));
+  t.mock.timers.reset();
+});
+
 for (const mode of ['matgo', 'gostop'] as const) {
   test(`${mode}: authoritative deadlines, automatic play, stale timers, disconnect and rematch`, t => {
     t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });

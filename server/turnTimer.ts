@@ -17,6 +17,9 @@ export function timeoutAction(match: Match, roomCode: string): GameAction {
 }
 
 export class TurnTimer {
+  constructor(private readonly timeoutMs = TURN_TIMEOUT_MS) {
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) throw new Error('Invalid turn timeout');
+  }
   view: TurnTimerView | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private generation = 0;
@@ -50,14 +53,14 @@ export class TurnTimer {
     const expected = this.generation;
     this.current = match;
     this.previous = match;
-    this.view = { startsAt, turnDeadline: startsAt + TURN_TIMEOUT_MS,
+    this.view = { startsAt, turnDeadline: startsAt + this.timeoutMs,
       timedPlayerSeat: match.turn, decisionPhase: match.phase };
     this.timer = setTimeout(() => {
       if (expected !== this.generation || this.current !== match || !this.view ||
         this.view.timedPlayerSeat !== match.turn || this.view.decisionPhase !== match.phase) return;
       this.cancel();
       expire();
-    }, animationMs + TURN_TIMEOUT_MS);
+    }, animationMs + this.timeoutMs);
     this.timer.unref();
   }
 }

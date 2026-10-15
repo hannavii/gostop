@@ -16,8 +16,10 @@ type Room = { code: string; mode: GameMode; members: Member[]; host: Member | nu
 const hashToken = (token: string) => createHash("sha256").update(token).digest();
 
 export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matchFactory = createMatch,
+  turnTimerFactory = () => new TurnTimer(),
   connectionPolicy = readServerConfig() }: {
   reconnectGraceMs?: number; matchFactory?: typeof createMatch;
+  turnTimerFactory?: () => TurnTimer;
   connectionPolicy?: Pick<ReturnType<typeof readServerConfig>, "allowedOrigins" | "allowMissingOrigin">;
 } = {}) {
   if (!Number.isSafeInteger(reconnectGraceMs) || reconnectGraceMs <= 0) throw new Error("Invalid reconnect grace period");
@@ -161,7 +163,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       if (rooms.size >= 1000) throw new Error("현재 생성 가능한 방이 가득 찼습니다.");
       let code: string;
       do { code = randomInt(0, 36 ** 6).toString(36).toUpperCase().padStart(6, "0"); } while (rooms.has(code));
-      const room: Room = { code, mode, members: [], host: null, match: null, round: 0, turnTimer: new TurnTimer() };
+      const room: Room = { code, mode, members: [], host: null, match: null, round: 0, turnTimer: turnTimerFactory() };
       rooms.set(code, room);
       addMember(room, name);
       publish(room);

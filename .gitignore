@@ -26,3 +26,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Browser test artifacts may contain session data
+/test-results/
+/playwright-report/
