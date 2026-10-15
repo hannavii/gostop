@@ -6,6 +6,16 @@ import type { GameMode } from "../src/game/rules";
 
 export const NICKNAME_MAX_LENGTH = 12;
 export type Seat = 0 | 1 | 2;
+export type GameLogEvent =
+  | { type: 'start'; payload: { rematch: boolean } }
+  | { type: 'play' | 'choose' | 'bomb' | 'shake'; playerSeat: Seat;
+      payload: { month: number; category: HwatuCard['category']; automatic: boolean } }
+  | { type: 'bomb-pass' | 'stop'; playerSeat: Seat; payload: { automatic: boolean } }
+  | { type: 'go'; playerSeat: Seat; payload: { automatic: boolean; goCount: number } }
+  | { type: 'special'; playerSeat: Seat; payload: { event: SpecialEvent } }
+  | { type: 'finished'; payload: { winner: Seat | 'draw' } }
+  | { type: 'disconnect' | 'reconnect'; playerSeat: Seat; payload: Record<string, never> };
+export type GameLogEntry = GameLogEvent & { id: string; round: number; revision: number; sequence: number };
 export type GameAction = {
   roomCode: string;
   revision: number;
@@ -42,6 +52,7 @@ export type GameView = {
 export type RoomView = { code: string; mode: GameMode; capacity: number; you: Seat; occupancy: number;
   host: Seat; round: number;
   turnTimer?: TurnTimerView | null;
+  logs?: GameLogEntry[];
   // Server epoch milliseconds; display only. Connected seats have a null deadline.
   connections: { seat: Seat; nickname: string; ready: boolean; rematchReady: boolean; connected: boolean; reconnectDeadline: number | null }[];
   game: GameView | null };
