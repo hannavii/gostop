@@ -207,6 +207,17 @@
 .online-reconnect-notice .online-player-connection { display: inline; margin: 0; font: inherit; }
 .online-reconnect-seconds { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .online-player-connection { max-width: 100%; overflow-wrap: anywhere; }
+.online-game-logs { min-width: 0; max-width: 280px; flex-basis: 100%; text-align: left; }
+.online-game-log-panel { box-sizing: border-box; max-height: 140px; overflow-y: auto; padding: 6px 8px; margin-top: 4px; border: 1px solid #ffffff40; border-radius: 6px; background: #173d32; color: white; overflow-wrap: anywhere; overscroll-behavior: contain; }
+.online-game-log-panel h3 { font-size: 11px; margin: 0 0 5px; }
+.online-game-log-panel ol { list-style: none; padding: 0; margin: 0; }
+.online-game-log-panel li { font-size: 11px; line-height: 1.5; padding: 4px 0; border-top: 1px solid #ffffff20; }
+.game-over-modal .online-game-logs { max-width: 100%; margin: 12px 0; }
+.game-over-modal .online-game-logs > button { min-height: 44px; padding: 8px 12px; border: 1px solid #ffffff50; border-radius: 8px; background: #174c36; color: white; cursor: pointer; }
+@media (max-width: 700px) {
+  .online-game-logs { max-width: 100%; }
+  .online-game-log-panel { max-height: 96px; }
+}
 .online-settlement-detail { text-align: left; overflow-wrap: anywhere; min-width: 0; }
 .online-settlement-detail h3 { font-size: 14px; margin: 14px 0 8px; }
 .online-score-details dl { margin: 0; }

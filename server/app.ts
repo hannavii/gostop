@@ -1,4 +1,5 @@
 import { TurnTimer } from "./turnTimer";
+import { GameLog } from './gameLog';
 import express from "express";
 import { createServer } from "node:http";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
@@ -12,7 +13,7 @@ import { readServerConfig } from "./config";
 export const RECONNECT_GRACE_MS = 60_000;
 type Member = { nickname: string; ready: boolean; rematchReady: boolean; socketId: string | null; tokenHash: Buffer; deadline: number | null;
   timer: ReturnType<typeof setTimeout> | null };
-type Room = { code: string; mode: GameMode; members: Member[]; host: Member | null; match: Match | null; round: number; turnTimer: TurnTimer };
+type Room = { code: string; mode: GameMode; members: Member[]; host: Member | null; match: Match | null; round: number; turnTimer: TurnTimer; log: GameLog };
 const hashToken = (token: string) => createHash("sha256").update(token).digest();
 
 export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matchFactory = createMatch,
@@ -47,20 +48,27 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
   function publish(room: Room) {
     room.turnTimer.sync(room.match, room.members.map(m => m.socketId !== null), () => {
       if (rooms.get(room.code) !== room) return;
-      room.match = applyAction(room.match!, room.match!.turn, room.turnTimer.fallback(room.match!, room.code));
+      commitAction(room, room.match!.turn, room.turnTimer.fallback(room.match!, room.code), true);
       publish(room);
     });
     room.members.forEach((member, seat) => {
       if (!member.socketId) return;
       // Never broadcast raw Room/Match, even to members of the same room.
       io.to(member.socketId).emit("room:state", {
-        code: room.code, round: room.round, turnTimer: room.turnTimer.view, you: seat as Seat, occupancy: room.members.length,
+        code: room.code, round: room.round, turnTimer: room.turnTimer.view, logs: room.log.entries, you: seat as Seat, occupancy: room.members.length,
         host: room.members.indexOf(room.host!) as Seat,
         mode: room.mode, capacity: GAME_RULES[room.mode].playerCount,
         connections: room.members.map((m, i) => ({ seat: i as Seat, nickname: m.nickname, ready: m.ready, rematchReady: m.rematchReady, connected: m.socketId !== null, reconnectDeadline: m.deadline })),
         game: room.match ? gameView(room.match, seat as Seat) : null,
       });
     });
+  }
+
+  function commitAction(room: Room, seat: Seat, action: Parameters<typeof applyAction>[2], automatic = false) {
+    const before = room.match!;
+    const after = applyAction(before, seat, action);
+    room.log.action(before, after, seat, action, automatic);
+    room.match = after;
   }
 
   function startRematch(room: Room) {
@@ -71,6 +79,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
     match.revision = room.match.revision + 1;
     room.match = match;
     room.round++;
+    room.log.start(room.round, match.revision);
     room.members.forEach(member => { member.rematchReady = false; });
   }
 
@@ -168,7 +177,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       if (rooms.size >= 1000) throw new Error("현재 생성 가능한 방이 가득 찼습니다.");
       let code: string;
       do { code = randomInt(0, 36 ** 6).toString(36).toUpperCase().padStart(6, "0"); } while (rooms.has(code));
-      const room: Room = { code, mode, members: [], host: null, match: null, round: 0, turnTimer: turnTimerFactory() };
+      const room: Room = { code, mode, members: [], host: null, match: null, round: 0, turnTimer: turnTimerFactory(), log: new GameLog(code) };
       rooms.set(code, room);
       addMember(room, name);
       publish(room);
@@ -200,6 +209,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       if (!member) throw new Error("재접속 토큰을 확인할 수 없습니다.");
       // A socket already owning another seat cannot switch identities by resuming.
       if (membership.has(socket.id) && member.socketId !== socket.id) throw new Error("이미 다른 좌석에 참가 중입니다.");
+      const reconnecting = member.socketId !== socket.id;
       if (member.timer) clearTimeout(member.timer);
       if (member.socketId && member.socketId !== socket.id) {
         // F5 may arrive before the old transport times out. Revoke it atomically.
@@ -214,6 +224,9 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       membership.set(socket.id, room.code);
       // Stable token makes retries safe even if the previous acknowledgement was lost.
       socket.emit("room:session", { roomCode: room.code, token: input.token });
+      if (reconnecting && room.match) room.log.append(room.match.revision, {
+        type: 'reconnect', playerSeat: room.members.indexOf(member) as Seat, payload: {},
+      });
       startRematch(room);
       publish(room);
     }));
@@ -231,6 +244,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
         room.members.some(m => !m.socketId || !m.ready)) throw new Error("모든 인원이 접속하고 준비를 완료해야 합니다.");
       room.match = matchFactory(room.mode);
       room.round++;
+      room.log.start(room.round, room.match.revision);
       publish(room);
     }));
     socket.on("room:leave", ack => handle(ack, () => {
@@ -261,7 +275,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       if (!room.match) throw new Error("플레이어가 모두 참가하기를 기다리는 중입니다.");
       const seat = room.members.findIndex(m => m.socketId === socket.id);
       if (seat < 0 || seat >= GAME_RULES[room.mode].playerCount) throw new Error("방의 플레이어가 아닙니다.");
-      room.match = applyAction(room.match, seat as Seat, action);
+      commitAction(room, seat as Seat, action);
       publish(room);
     }));
     socket.on("disconnect", () => {
@@ -271,6 +285,9 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       const member = room?.members.find(m => m.socketId === socket.id);
       if (!room || !member) return;
       member.socketId = null;
+      if (room.match) room.log.append(room.match.revision, {
+        type: 'disconnect', playerSeat: room.members.indexOf(member) as Seat, payload: {},
+      });
       member.deadline = Date.now() + reconnectGraceMs;
       member.timer = setTimeout(() => {
         if (rooms.get(room.code) === room && member.socketId === null) {

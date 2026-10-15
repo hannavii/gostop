@@ -153,7 +153,7 @@ export async function startRoom(peers: Peer[]) {
 
 export async function noOverflow(page: Page) {
   await expect.poll(() => page.evaluate(() => {
-    const selectors = '.online-page, .online-game-toolbar, .online-reconnect-notice, .online-player-connection, .player-area, .table, .go-stop-modal, .game-over-modal, .capture-zoom-panel, .online-settlement-detail';
+    const selectors = '.online-page, .online-game-toolbar, .online-game-logs, .online-game-log-panel, .online-reconnect-notice, .online-player-connection, .player-area, .table, .go-stop-modal, .game-over-modal, .capture-zoom-panel, .online-settlement-detail';
     return document.documentElement.scrollWidth <= innerWidth + 1 &&
       [...document.querySelectorAll(selectors)].filter(e => e.getClientRects().length).every(e => {
         const r = e.getBoundingClientRect(); return r.left >= -1 && r.right <= innerWidth + 1;

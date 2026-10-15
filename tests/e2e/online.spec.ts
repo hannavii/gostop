@@ -87,6 +87,10 @@ test.describe('stable server settlement fixture', () => {
       await peers[0].page.getByRole('button', { name: 'STOP', exact: true }).click();
       for (const peer of peers) {
         await expect(peer.page.locator('.game-over-modal')).toBeVisible();
+        expect(peer.view!.logs!.slice(-2).map(e => e.type)).toEqual(['stop', 'finished']);
+        await peer.page.getByTestId('game-log-toggle').click();
+        await expect(peer.page.locator('[data-log-type="stop"]')).toHaveCount(1);
+        await expect(peer.page.locator('[data-log-type="finished"]')).toHaveCount(1);
         await noOverflow(peer.page);
       }
       await peers[0].page.goto('about:blank');
@@ -102,6 +106,7 @@ test.describe('stable server settlement fixture', () => {
       expect(peers.every(p => p.view!.round === 1 && p.view!.game!.phase === 'finished')).toBe(true);
       for (const peer of peers.slice(1)) await peer.page.getByRole('button', { name: '다시하기', exact: true }).click();
       await expect.poll(() => peers.every(p => p.view!.round === 2)).toBe(true);
+      expect(peers.every(p => p.view!.logs!.length === 1 && p.view!.logs![0].type === 'start' && p.view!.logs![0].round === 2)).toBe(true);
       for (let seat = 0; seat < peers.length; seat++) {
         const peer = peers[seat], view = peer.view!, game = view.game!;
         expect(view.code === before[seat].code && view.you === seat).toBe(true);
@@ -145,6 +150,13 @@ test.describe('server-only short deadline injection', () => {
       await expect.poll(() => peers.every(p => p.view!.game!.revision > initial.game!.revision && p.view!.game!.turn === 1)).toBe(true);
       for (const peer of peers) { await settled(peer); await noOverflow(peer.page); }
       expect(peers.every(p => p.view!.turnTimer!.timedPlayerSeat === 1)).toBe(true);
+      for (const peer of peers) {
+        const automatic = peer.view!.logs!.filter(e => 'automatic' in e.payload && e.payload.automatic);
+        expect(automatic.length).toBe(1);
+        expect(automatic[0].type).toBe('play');
+        await peer.page.getByTestId('game-log-toggle').click();
+        await expect(peer.page.locator('[data-log-automatic="true"]')).toHaveCount(1);
+      }
     });
   }
 });

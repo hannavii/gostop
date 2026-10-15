@@ -1,4 +1,5 @@
 import TurnCountdown from "./TurnCountdown";
+import GameLogPanel from './GameLogPanel';
 import ConnectionStatus, { ReconnectNotice } from "./ConnectionStatus";
 import { Fragment, useLayoutEffect, useRef, useState } from "react";
 import type { GameAction, GameView, RoomView, Seat } from "../../shared/online";
@@ -61,7 +62,7 @@ export default function OnlineGameBoard({ room, game: latestGame, enabled, messa
     };
     measure();
     const observer = new ResizeObserver(measure);
-    for (const element of board.querySelectorAll('.card-row, .floor-cards, .captured-panel, .draw-pile-area')) observer.observe(element);
+    for (const element of board.querySelectorAll('.online-game-toolbar, .card-row, .floor-cards, .captured-panel, .draw-pile-area')) observer.observe(element);
     observer.observe(board);
     window.addEventListener('resize', measure);
     board.addEventListener('scroll', measure, true);
@@ -79,6 +80,9 @@ export default function OnlineGameBoard({ room, game: latestGame, enabled, messa
   const selected = detail === null ? null : game.players[detail];
   const result = game.result;
   const settlement = result?.settlement;
+  // Hold this revision's public log until its card presentation has completed.
+  const visibleLogs = (room.logs ?? []).filter(entry => entry.round === room.round && entry.revision <= game.revision &&
+    (!animating || entry.revision < latestGame.revision));
   const turnMessage = !activeConnected && latestGame.phase !== "finished"
     ? `${name(latestGame.turn)}님의 재접속을 기다리는 중입니다.` : message || (finished ? "게임이 끝났습니다." : !myTurn
     ? game.phase === "choose" ? `${name(game.turn)}님이 바닥패를 선택하고 있습니다.` : game.phase === "go-stop" ? `${name(game.turn)}님이 GO / STOP을 선택하고 있습니다.` : `${name(game.turn)}님 차례입니다.`
@@ -90,6 +94,7 @@ export default function OnlineGameBoard({ room, game: latestGame, enabled, messa
       <span> {room.occupancy}/{room.capacity}명 · {three ? "3인 고스톱" : "2인 맞고"}</span>
       <button disabled={!enabled} onClick={onSync}>새로고침</button>
       <button disabled={!enabled} onClick={onLeave}>방 나가기</button>
+      {!result && <GameLogPanel entries={visibleLogs} name={name} />}
       <ReconnectNotice connections={room.connections} activeSeat={latestGame.phase === "finished" ? undefined : latestGame.turn} />
     </nav>
     {visual.effect && <div key={visual.effect} className="special-effect" role="status">{visual.effect}</div>}
@@ -176,6 +181,7 @@ export default function OnlineGameBoard({ room, game: latestGame, enabled, messa
       <section className="online-result-captured" aria-label="최종 획득패">
         {[mine, ...opponents].map(p => <button key={p.seat} onClick={() => setDetail(p.seat)}>{name(p.seat)} 획득패 보기</button>)}
       </section>
+      <GameLogPanel entries={visibleLogs} name={name} />
       <section className="rematch-status" aria-label="다시하기 동의 상태" aria-live="polite">
         <p>모두 다시하기에 동의하고 접속하면 같은 방에서 새 판을 시작합니다.</p>
         <ul>{room.connections.map(player => <li key={player.seat}>
