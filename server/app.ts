@@ -1,3 +1,4 @@
+import { TurnTimer } from "./turnTimer";
 import express from "express";
 import { createServer } from "node:http";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
@@ -11,7 +12,7 @@ import { readServerConfig } from "./config";
 export const RECONNECT_GRACE_MS = 60_000;
 type Member = { nickname: string; ready: boolean; rematchReady: boolean; socketId: string | null; tokenHash: Buffer; deadline: number | null;
   timer: ReturnType<typeof setTimeout> | null };
-type Room = { code: string; mode: GameMode; members: Member[]; host: Member | null; match: Match | null; round: number };
+type Room = { code: string; mode: GameMode; members: Member[]; host: Member | null; match: Match | null; round: number; turnTimer: TurnTimer };
 const hashToken = (token: string) => createHash("sha256").update(token).digest();
 
 export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matchFactory = createMatch,
@@ -42,11 +43,16 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
   app.get("/health", (_req, res) => { res.json({ ok: true }); });
 
   function publish(room: Room) {
+    room.turnTimer.sync(room.match, room.members.map(m => m.socketId !== null), () => {
+      if (rooms.get(room.code) !== room) return;
+      room.match = applyAction(room.match!, room.match!.turn, room.turnTimer.fallback(room.match!, room.code));
+      publish(room);
+    });
     room.members.forEach((member, seat) => {
       if (!member.socketId) return;
       // Never broadcast raw Room/Match, even to members of the same room.
       io.to(member.socketId).emit("room:state", {
-        code: room.code, round: room.round, you: seat as Seat, occupancy: room.members.length,
+        code: room.code, round: room.round, turnTimer: room.turnTimer.view, you: seat as Seat, occupancy: room.members.length,
         host: room.members.indexOf(room.host!) as Seat,
         mode: room.mode, capacity: GAME_RULES[room.mode].playerCount,
         connections: room.members.map((m, i) => ({ seat: i as Seat, nickname: m.nickname, ready: m.ready, rematchReady: m.rematchReady, connected: m.socketId !== null, reconnectDeadline: m.deadline })),
@@ -67,6 +73,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
   }
 
   function closeRoom(room: Room, reason: string) {
+    room.turnTimer.cancel();
     rooms.delete(room.code);
     for (const member of room.members) {
       if (member.timer) clearTimeout(member.timer);
@@ -113,7 +120,10 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
   }
 
   http.on("close", () => {
-    for (const room of rooms.values()) for (const member of room.members) if (member.timer) clearTimeout(member.timer);
+    for (const room of rooms.values()) {
+      room.turnTimer.cancel();
+      for (const member of room.members) if (member.timer) clearTimeout(member.timer);
+    }
     rooms.clear(); membership.clear();
   });
 
@@ -151,7 +161,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       if (rooms.size >= 1000) throw new Error("현재 생성 가능한 방이 가득 찼습니다.");
       let code: string;
       do { code = randomInt(0, 36 ** 6).toString(36).toUpperCase().padStart(6, "0"); } while (rooms.has(code));
-      const room: Room = { code, mode, members: [], host: null, match: null, round: 0 };
+      const room: Room = { code, mode, members: [], host: null, match: null, round: 0, turnTimer: new TurnTimer() };
       rooms.set(code, room);
       addMember(room, name);
       publish(room);
@@ -191,6 +201,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
         io.to(oldId).emit("room:closed", "다른 연결에서 같은 좌석을 복구했습니다.");
         io.sockets.sockets.get(oldId)?.disconnect(true);
       }
+      if (room.match?.turn === room.members.indexOf(member)) room.turnTimer.cancel();
       member.socketId = socket.id;
       member.deadline = null; member.timer = null;
       membership.set(socket.id, room.code);

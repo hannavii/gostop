@@ -1,3 +1,4 @@
+import TurnCountdown from "./TurnCountdown";
 import { Fragment, useLayoutEffect, useRef, useState } from "react";
 import type { GameAction, GameView, RoomView, Seat } from "../../shared/online";
 import RoomCode from "./RoomCode";
@@ -81,6 +82,7 @@ export default function OnlineGameBoard({ room, game: latestGame, enabled, messa
   return <main ref={boardRef} className={`game ${three ? "gostop3-game online-gostop-game" : "online-matgo-game"} ${animating ? "is-animating" : ""}`} style={GAME_SPEED_STYLE}>
     <nav className="online-game-toolbar" aria-label="방 정보">
       <RoomCode code={room.code} />
+      {room.turnTimer && <TurnCountdown timer={room.turnTimer} name={room.connections[room.turnTimer.timedPlayerSeat].nickname} />}
       <span> {room.occupancy}/{room.capacity}명 · {three ? "3인 고스톱" : "2인 맞고"}</span>
       <button disabled={!enabled} onClick={onSync}>새로고침</button>
       <button disabled={!enabled} onClick={onLeave}>방 나가기</button>
