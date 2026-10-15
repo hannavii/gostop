@@ -1,4 +1,4 @@
-import { calculateScore } from "./scoring";
+import { calculateScore, type ScoreItem } from "./scoring";
 import type { HwatuCard } from "../types/game";
 
 export type GostopPlayerIndex = 0 | 1 | 2;
@@ -36,6 +36,8 @@ export type GostopLoserSettlement = {
 };
 
 export type GostopSettlementResult = {
+  scoreItems?: ScoreItem[];
+  sakeCupAsPi?: boolean;
   winner: GostopPlayerIndex;
 
   baseScore: number;
@@ -243,6 +245,8 @@ export function calculateGostopSettlement({
   );
 
   return {
+    scoreItems: winnerScore.scoreItems,
+    sakeCupAsPi: winnerScore.sakeCupAsPi,
     winner,
     baseScore,
     goBonus,

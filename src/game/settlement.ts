@@ -1,4 +1,4 @@
-import { calculateScore } from "./scoring";
+import { calculateScore, type ScoreItem } from "./scoring";
 import type { HwatuCard } from "../types/game";
 
 export type SettlementMultiplier = {
@@ -14,6 +14,9 @@ export type SettlementMultiplier = {
 };
 
 export type SettlementResult = {
+  // Additive metadata; optional for older fixtures/consumers.
+  scoreItems?: ScoreItem[];
+  sakeCupAsPi?: boolean;
   baseScore: number;
   goBonus: number;
   scoreBeforeMultipliers: number;
@@ -140,6 +143,8 @@ export function calculateSettlement(
   );
 
   return {
+    scoreItems: winnerScore.scoreItems,
+    sakeCupAsPi: winnerScore.sakeCupAsPi,
     baseScore,
     goBonus,
     scoreBeforeMultipliers,

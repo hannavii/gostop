@@ -1,5 +1,11 @@
 import type { HwatuCard } from "../types/game";
 
+export type ScoreItem = {
+  id: 'gwang' | 'animal' | 'godori' | 'ribbon' | 'hongdan' | 'cheongdan' | 'chodan' | 'pi';
+  label: string;
+  points: number;
+};
+
 export type ScoreResult = {
   total: number;
 
@@ -19,7 +25,14 @@ export type ScoreResult = {
   chodan: boolean;
 
   sakeCupAsPi: boolean;
+  scoreItems: ScoreItem[];
 };
+
+// Record the same contribution that is added to the existing score.
+function contribution(items: ScoreItem[], id: ScoreItem['id'], label: string, points: number) {
+  if (points > 0) items.push({ id, label, points });
+  return points;
+}
 
 function hasTag(
   card: HwatuCard,
@@ -66,12 +79,12 @@ function calculateGwangScore(
 ========================= */
 
 function calculateAnimalScore(
-  animalCards: HwatuCard[]
+  animalCards: HwatuCard[], items: ScoreItem[]
 ): number {
   let score = 0;
 
   if (animalCards.length >= 5) {
-    score += animalCards.length - 4;
+    score += contribution(items, 'animal', '열끗', animalCards.length - 4);
   }
 
   const godoriCount =
@@ -80,7 +93,7 @@ function calculateAnimalScore(
     ).length;
 
   if (godoriCount === 3) {
-    score += 5;
+    score += contribution(items, 'godori', '고도리', 5);
   }
 
   return score;
@@ -91,7 +104,7 @@ function calculateAnimalScore(
 ========================= */
 
 function calculateRibbonScore(
-  cards: HwatuCard[]
+  cards: HwatuCard[], items: ScoreItem[]
 ): number {
   const ribbons = cards.filter(
     (card) => card.category === "ribbon"
@@ -100,7 +113,7 @@ function calculateRibbonScore(
   let score = 0;
 
   if (ribbons.length >= 5) {
-    score += ribbons.length - 4;
+    score += contribution(items, 'ribbon', '띠', ribbons.length - 4);
   }
 
   const hongdanCount =
@@ -119,15 +132,15 @@ function calculateRibbonScore(
     ).length;
 
   if (hongdanCount === 3) {
-    score += 3;
+    score += contribution(items, 'hongdan', '홍단', 3);
   }
 
   if (cheongdanCount === 3) {
-    score += 3;
+    score += contribution(items, 'cheongdan', '청단', 3);
   }
 
   if (chodanCount === 3) {
-    score += 3;
+    score += contribution(items, 'chodan', '초단', 3);
   }
 
   return score;
@@ -205,9 +218,11 @@ export function calculateScore(
   const animalOptionCards =
     normalAnimalCards;
 
+  const animalOptionItems: ScoreItem[] = [];
+
   const animalOptionScore =
     calculateAnimalScore(
-      animalOptionCards
+      animalOptionCards, animalOptionItems
     );
 
   const normalPiCount =
@@ -225,6 +240,7 @@ export function calculateScore(
 
   let finalAnimalScore =
     animalOptionScore;
+  let finalAnimalItems = animalOptionItems;
 
   let finalPiCount =
     normalPiCount;
@@ -239,9 +255,10 @@ export function calculateScore(
           card.id !== sakeCup.id
       );
 
+    const sakeAsPiAnimalItems: ScoreItem[] = [];
     const sakeAsPiAnimalScore =
       calculateAnimalScore(
-        animalsWithoutSakeCup
+        animalsWithoutSakeCup, sakeAsPiAnimalItems
       );
 
     const sakeAsPiCount =
@@ -268,6 +285,7 @@ export function calculateScore(
 
       finalAnimalScore =
         sakeAsPiAnimalScore;
+      finalAnimalItems = sakeAsPiAnimalItems;
 
       finalPiCount =
         sakeAsPiCount;
@@ -280,8 +298,14 @@ export function calculateScore(
   const gwangScore =
     calculateGwangScore(cards);
 
+  const ribbonItems: ScoreItem[] = [];
   const ribbonScore =
-    calculateRibbonScore(cards);
+    calculateRibbonScore(cards, ribbonItems);
+
+  const scoreItems: ScoreItem[] = [];
+  contribution(scoreItems, 'gwang', '광', gwangScore);
+  scoreItems.push(...finalAnimalItems, ...ribbonItems);
+  contribution(scoreItems, 'pi', '피', finalPiScore);
 
   const total =
     gwangScore +
@@ -334,5 +358,6 @@ export function calculateScore(
       ).length === 3,
 
     sakeCupAsPi,
+    scoreItems,
   };
 }
