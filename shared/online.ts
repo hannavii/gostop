@@ -17,6 +17,8 @@ export type GameLogEvent =
   | { type: 'disconnect' | 'reconnect'; playerSeat: Seat; payload: Record<string, never> };
 export type GameLogEntry = GameLogEvent & { id: string; round: number; revision: number; sequence: number };
 export type GameAction = {
+  // Optional for existing clients; room-wide revisions also reject previous deals.
+  round?: number;
   roomCode: string;
   revision: number;
   type: "play" | "bomb" | "shake" | "bomb-pass" | "choose" | "go" | "stop";
