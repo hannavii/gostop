@@ -105,11 +105,16 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
     if (!room) throw new Error("방을 찾을 수 없습니다. 복구 시간이 지났거나 서버가 재시작되었을 수 있습니다.");
     for (const member of [...room.members]) {
       if (member.deadline !== null && member.deadline <= Date.now()) {
-        removeMember(room, member, "재접속 대기 시간이 만료되었습니다.");
+        removeMember(room, member, reconnectExpiryReason(room, member));
         if (!rooms.has(code)) throw new Error("재접속 대기 시간이 만료되었습니다.");
       }
     }
     return room;
+  }
+
+  function reconnectExpiryReason(room: Room, member: Member) {
+    return room.match ? `${member.nickname}님의 재접속 대기 시간이 만료되어 방이 종료되었습니다.`
+      : `${member.nickname}님의 재접속 대기 시간이 만료되었습니다.`;
   }
 
   function nickname(input: unknown) {
@@ -269,7 +274,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       member.deadline = Date.now() + reconnectGraceMs;
       member.timer = setTimeout(() => {
         if (rooms.get(room.code) === room && member.socketId === null) {
-          removeMember(room, member, "재접속 대기 시간이 만료되었습니다.");
+          removeMember(room, member, reconnectExpiryReason(room, member));
         }
       }, reconnectGraceMs);
       member.timer.unref();

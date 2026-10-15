@@ -82,13 +82,21 @@ for (const mode of ['matgo', 'gostop'] as GameMode[]) {
 test.describe('stable server settlement fixture', () => {
   test.use({ scenario: 'rematch' });
   for (const mode of ['matgo', 'gostop'] as GameMode[]) {
-    test(`${mode}: unanimous rematch preserves identities and resets the game`, async ({ createRoom }) => {
+    test(`${mode}: unanimous rematch preserves identities and resets the game`, async ({ createRoom, site }) => {
       const peers = await createRoom(mode), before = peers.map(p => p.view!);
       await peers[0].page.getByRole('button', { name: 'STOP', exact: true }).click();
       for (const peer of peers) {
         await expect(peer.page.locator('.game-over-modal')).toBeVisible();
         await noOverflow(peer.page);
       }
+      await peers[0].page.goto('about:blank');
+      await expect(peers[1].page.locator('.rematch-status').getByTestId('connection-0')).toContainText('재접속 대기 중');
+      // A disconnected previous actor must not prevent another seat's rematch vote.
+      await peers[1].page.getByRole('button', { name: '다시하기', exact: true }).click();
+      await peers[1].page.getByRole('button', { name: '다시하기 취소', exact: true }).click();
+      await peers[0].page.goto(site);
+      await expect(peers[0].page.locator('.game-over-modal')).toBeVisible();
+      await expect(peers[1].page.getByTestId('reconnect-notice')).toHaveCount(0);
       await peers[0].page.getByRole('button', { name: '다시하기', exact: true }).click();
       await expect.poll(() => peers.every(p => p.view!.connections[0].rematchReady)).toBe(true);
       expect(peers.every(p => p.view!.round === 1 && p.view!.game!.phase === 'finished')).toBe(true);

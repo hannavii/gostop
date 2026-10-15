@@ -196,3 +196,16 @@
 .online-turn-timer > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .online-turn-timer strong { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .online-turn-timer.is-urgent { background: #8d271d; outline: 2px solid #ffc770; }
+
+/* Reconnect is a connection notice, separate from the green/red action timer. */
+.online-reconnect-notice { flex: 1 0 100%; box-sizing: border-box; min-width: 0; max-width: 100%; padding: 6px 8px; border: 1px dashed #efcb80; border-radius: 6px; background: #293b43; color: #ffe7b9; font-size: 11px; overflow-wrap: anywhere; }
+.online-reconnect-notice p { margin: 0 0 3px; }
+.online-reconnect-notice ul { display: flex; flex-wrap: wrap; gap: 3px 12px; list-style: none; padding: 0; margin: 0; }
+.online-reconnect-notice li { min-width: 0; max-width: 100%; }
+.online-reconnect-notice .online-player-connection { display: inline; margin: 0; font: inherit; }
+.online-reconnect-seconds { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.online-player-connection { max-width: 100%; overflow-wrap: anywhere; }
+.rematch-status .online-player-connection { font-weight: normal; }
+@media (max-width: 700px) {
+  .online-reconnect-notice { padding: 5px 6px; font-size: 10px; }
+}

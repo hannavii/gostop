@@ -42,6 +42,7 @@ export type GameView = {
 export type RoomView = { code: string; mode: GameMode; capacity: number; you: Seat; occupancy: number;
   host: Seat; round: number;
   turnTimer?: TurnTimerView | null;
+  // Server epoch milliseconds; display only. Connected seats have a null deadline.
   connections: { seat: Seat; nickname: string; ready: boolean; rematchReady: boolean; connected: boolean; reconnectDeadline: number | null }[];
   game: GameView | null };
 

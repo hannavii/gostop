@@ -1,4 +1,5 @@
 import TurnCountdown from "./TurnCountdown";
+import ConnectionStatus, { ReconnectNotice } from "./ConnectionStatus";
 import { Fragment, useLayoutEffect, useRef, useState } from "react";
 import type { GameAction, GameView, RoomView, Seat } from "../../shared/online";
 import RoomCode from "./RoomCode";
@@ -72,20 +73,23 @@ export default function OnlineGameBoard({ room, game: latestGame, enabled, messa
   const name = (seat: Seat) => room.connections[seat].nickname;
   const myTurn = game.turn === room.you;
   const finished = game.phase === "finished";
-  const canAct = enabled && !animating;
+  const activeConnected = room.connections[latestGame.turn].connected;
+  const canAct = enabled && !animating && (latestGame.phase === "finished" || activeConnected);
   const selected = detail === null ? null : game.players[detail];
   const result = game.result;
   const settlement = result?.settlement;
-  const turnMessage = message || (finished ? "게임이 끝났습니다." : !myTurn
+  const turnMessage = !activeConnected && latestGame.phase !== "finished"
+    ? `${name(latestGame.turn)}님의 재접속을 기다리는 중입니다.` : message || (finished ? "게임이 끝났습니다." : !myTurn
     ? game.phase === "choose" ? `${name(game.turn)}님이 바닥패를 선택하고 있습니다.` : game.phase === "go-stop" ? `${name(game.turn)}님이 GO / STOP을 선택하고 있습니다.` : `${name(game.turn)}님 차례입니다.`
     : game.phase === "play" ? game.canPlayHand ? "낼 카드를 선택하세요." : "남은 폭탄 패스를 사용하세요." : "");
   return <main data-testid="online-board" data-seat={room.you} data-turn={latestGame.turn} data-revision={latestGame.revision} data-round={room.round} ref={boardRef} className={`game ${three ? "gostop3-game online-gostop-game" : "online-matgo-game"} ${animating ? "is-animating" : ""}`} style={GAME_SPEED_STYLE}>
     <nav className="online-game-toolbar" aria-label="방 정보">
       <RoomCode code={room.code} />
-      {room.turnTimer && <TurnCountdown timer={room.turnTimer} name={room.connections[room.turnTimer.timedPlayerSeat].nickname} />}
+      {room.turnTimer && activeConnected && <TurnCountdown timer={room.turnTimer} name={room.connections[room.turnTimer.timedPlayerSeat].nickname} />}
       <span> {room.occupancy}/{room.capacity}명 · {three ? "3인 고스톱" : "2인 맞고"}</span>
       <button disabled={!enabled} onClick={onSync}>새로고침</button>
       <button disabled={!enabled} onClick={onLeave}>방 나가기</button>
+      <ReconnectNotice connections={room.connections} activeSeat={latestGame.phase === "finished" ? undefined : latestGame.turn} />
     </nav>
     {visual.effect && <div key={visual.effect} className="special-effect" role="status">{visual.effect}</div>}
     {visual.card && <div className="animation-layer" aria-hidden="true"><div key={visual.card.id} className={`flying-card flying-card--${visual.kind}`}>
@@ -112,7 +116,7 @@ export default function OnlineGameBoard({ room, game: latestGame, enabled, messa
       {opponents.map(opponent => {
         const content = <>
       <h2>{opponent.seat === room.host && <span aria-label="방장">👑 </span>}{name(opponent.seat)}{game.turn === opponent.seat && !finished && " ◀"}</h2>
-      <small className="online-player-connection">{room.connections[opponent.seat].connected ? "접속 중" : "재접속 대기"}</small>
+      <ConnectionStatus player={room.connections[opponent.seat]} />
       <div className={`card-row${three ? " gostop3-opponent-hand" : ""}`} aria-label={three ? `${name(opponent.seat)} 손패` : "상대 손패"}>
         {Array.from({ length: opponent.handCount }, (_, i) => <Card key={i} isBack />)}
       </div>
@@ -132,7 +136,7 @@ export default function OnlineGameBoard({ room, game: latestGame, enabled, messa
       gameStarted drawCount={game.drawCount} handleFloorCardChoice={card => act("choose", card.id)} />
     <section className={`player-area${three ? " gostop3-player-area" : ""}`}>
       <h2>{room.you === room.host && <span aria-label="방장">👑 </span>}{name(room.you)} (나){myTurn && !finished && " ◀"}</h2>
-      <small>{room.connections[room.you].connected ? "접속 중" : "재접속 대기"}</small>
+      <ConnectionStatus player={room.connections[room.you]} />
       <div data-testid="own-hand" className={`card-row${three ? " gostop3-player-hand" : ""}`} aria-label="내 손패">{game.hand.map(card => <Card key={card.id} card={card}
         onClick={canAct && game.canPlayHand && !specialPrompt ? () => {
           const option = game.specialOptions.find(option => option.cardId === card.id);
@@ -176,7 +180,7 @@ export default function OnlineGameBoard({ room, game: latestGame, enabled, messa
         <p>모두 다시하기에 동의하고 접속하면 같은 방에서 새 판을 시작합니다.</p>
         <ul>{room.connections.map(player => <li key={player.seat}>
           <span>{player.nickname}{player.seat === room.you ? " (나)" : ""}</span>
-          <strong>{player.rematchReady ? "다시하기 동의" : "대기 중"}{!player.connected && " · 재접속 대기"}</strong>
+          <strong>{player.rematchReady ? "다시하기 동의" : "대기 중"}<ConnectionStatus player={player} /></strong>
         </li>)}</ul>
       </section>
       <div className="rematch-actions">
