@@ -11,6 +11,14 @@ export class GameLog {
   private round = 0;
   constructor(private readonly roomCode: string) {}
 
+  copy() {
+    const log = new GameLog(this.roomCode);
+    log.entries = [...this.entries];
+    log.sequence = this.sequence;
+    log.round = this.round;
+    return log;
+  }
+
   start(round: number, revision: number) {
     this.round = round; this.sequence = 0; this.entries = [];
     this.append(revision, { type: 'start', payload: { rematch: round > 1 } });

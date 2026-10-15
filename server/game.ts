@@ -1,3 +1,4 @@
+import { RequestError, record, validRoomCode, validCounter } from './validation';
 import { hwatuCards } from "../src/data/cards";
 import { dealCards, dealGostopCards } from "../src/game/deal";
 import { GAME_RULES, type GameMode } from "../src/game/rules";
@@ -32,7 +33,7 @@ export type Match = {
   result: GameView["result"];
 };
 export function createMatch(mode: GameMode = "matgo"): Match {
-  if (mode !== "matgo" && mode !== "gostop") throw new Error("지원하지 않는 게임 모드입니다.");
+  if (mode !== "matgo" && mode !== "gostop") throw new RequestError("지원하지 않는 게임 모드입니다.");
   const dealt = mode === "gostop" ? dealGostopCards(hwatuCards) : dealCards(hwatuCards);
   const hands = "opponentCards" in dealt ? [dealt.playerCards, dealt.opponentCards]
     : [dealt.playerCards, dealt.opponent1Cards, dealt.opponent2Cards];
@@ -119,20 +120,18 @@ function drawOnly(match: Match, capturedCards: HwatuCard[] = [], stealPi = 0) {
 
 // Runtime validation is required even when a client uses the shared TS types.
 export function parseAction(input: unknown): GameAction {
-  if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("잘못된 행동 요청입니다.");
-  const a = input as Record<string, unknown>;
-  if (Object.keys(a).some(key => !["roomCode", "revision", "type", "cardId"].includes(key)) ||
-    typeof a.roomCode !== "string" || !/^[A-Z0-9]{6}$/.test(a.roomCode) ||
-    !Number.isSafeInteger(a.revision) || (a.revision as number) < 0 ||
+  const a = record(input, ["roomCode", "revision", "round", "type", "cardId"], "잘못된 행동 요청입니다.");
+  if (!validRoomCode(a.roomCode) || !validCounter(a.revision, 0) ||
+    (Object.hasOwn(a, 'round') && !validCounter(a.round, 1)) ||
     !["play", "bomb", "shake", "bomb-pass", "choose", "go", "stop"].includes(a.type as string)) {
-    throw new Error("잘못된 행동 요청입니다.");
+    throw new RequestError("잘못된 행동 요청입니다.");
   }
   if (a.type === "play" || a.type === "choose" || a.type === "bomb" || a.type === "shake") {
     if (typeof a.cardId !== "string" || a.cardId.length === 0 || a.cardId.length > 64) {
-      throw new Error("카드 ID가 필요합니다.");
+      throw new RequestError("카드 ID가 필요합니다.");
     }
   } else if (a.cardId !== undefined) {
-    throw new Error("이 행동에는 카드 ID를 보낼 수 없습니다.");
+    throw new RequestError("이 행동에는 카드 ID를 보낼 수 없습니다.");
   }
   return a as GameAction;
 }
@@ -140,28 +139,28 @@ export function parseAction(input: unknown): GameAction {
 // Synchronous, atomic transition: invalid actions cannot partially mutate the match.
 export function applyAction(current: Match, seat: Seat, action: GameAction): Match {
   parseAction(action);
-  if (!Number.isInteger(seat) || seat < 0 || seat >= current.players.length) throw new Error("방의 플레이어가 아닙니다.");
-  if (action.revision !== current.revision) throw new Error("지난 게임 상태의 요청입니다. 다시 선택해주세요.");
-  if (current.phase === "finished") throw new Error("이미 종료된 게임입니다.");
-  if (seat !== current.turn) throw new Error("상대방 차례입니다.");
+  if (!Number.isInteger(seat) || seat < 0 || seat >= current.players.length) throw new RequestError("방의 플레이어가 아닙니다.");
+  if (action.revision !== current.revision) throw new RequestError("지난 게임 상태의 요청입니다. 다시 선택해주세요.");
+  if (current.phase === "finished") throw new RequestError("이미 종료된 게임입니다.");
+  if (seat !== current.turn) throw new RequestError("상대방 차례입니다.");
   const match = structuredClone(current);
   const player = match.players[seat];
   const engine = turnEngine(match.mode);
 
   if (action.type === "bomb-pass") {
-    if (match.phase !== "play" || player.bombPassCount <= 0) throw new Error("사용 가능한 폭탄 패스가 없습니다.");
+    if (match.phase !== "play" || player.bombPassCount <= 0) throw new RequestError("사용 가능한 폭탄 패스가 없습니다.");
     player.bombPassCount--;
     match.revealed = [];
     match.events = ["bomb-pass"];
     drawOnly(match);
   } else if (action.type === "play" || action.type === "bomb" || action.type === "shake") {
-    if (match.phase !== "play") throw new Error("먼저 패 선택 또는 GO/STOP을 완료해주세요.");
-    if (!canPlayHand(match, seat)) throw new Error("남은 폭탄 패스를 먼저 사용해주세요.");
+    if (match.phase !== "play") throw new RequestError("먼저 패 선택 또는 GO/STOP을 완료해주세요.");
+    if (!canPlayHand(match, seat)) throw new RequestError("남은 폭탄 패스를 먼저 사용해주세요.");
     const card = player.hand.find(c => c.id === action.cardId);
-    if (!card) throw new Error("자신의 손패에 없는 카드입니다.");
+    if (!card) throw new RequestError("자신의 손패에 없는 카드입니다.");
     if (action.type === "bomb") {
       const bomb = engine.getBombActionForMonth(player.hand, match.floor, card.month);
-      if (!bomb) throw new Error("폭탄을 사용할 수 없습니다.");
+      if (!bomb) throw new RequestError("폭탄을 사용할 수 없습니다.");
       player.hand = player.hand.filter(c => c.month !== card.month);
       match.floor = match.floor.filter(c => c.id !== bomb.floorCard.id);
       player.bombCount++;
@@ -174,7 +173,7 @@ export function applyAction(current: Match, seat: Seat, action: GameAction): Mat
     }
     if (action.type === "shake") {
       if (player.shakeMonths.includes(card.month) || !engine.canShakeMonth(player.hand, match.floor, card.month)) {
-        throw new Error("흔들기를 선언할 수 없습니다.");
+        throw new RequestError("흔들기를 선언할 수 없습니다.");
       }
       player.shakeMonths.push(card.month);
     }
@@ -190,19 +189,19 @@ export function applyAction(current: Match, seat: Seat, action: GameAction): Mat
     }
   } else if (action.type === "choose") {
     const pending = match.pending;
-    if (match.phase !== "choose" || !pending) throw new Error("선택할 패가 없습니다.");
+    if (match.phase !== "choose" || !pending) throw new RequestError("선택할 패가 없습니다.");
     const choices = pending.kind === "hand" ? pending.matches : pending.choice.matchingCards;
     const selected = choices.find(c => c.id === action.cardId);
-    if (!selected) throw new Error("선택 가능한 바닥패가 아닙니다.");
+    if (!selected) throw new RequestError("선택 가능한 바닥패가 아닙니다.");
     if (pending.kind === "hand") {
       const prepared = engine.prepareHandPlay(pending.card, match.floor, seat, match.ppeokStacks, selected.id);
-      if (prepared.type !== "ready") throw new Error("패 선택을 처리할 수 없습니다.");
+      if (prepared.type !== "ready") throw new RequestError("패 선택을 처리할 수 없습니다.");
       draw(match, prepared.prepared);
     } else {
       complete(match, engine.resolveDrawChoice(pending.choice, selected));
     }
   } else {
-    if (match.phase !== "go-stop") throw new Error("GO/STOP을 선언할 수 없습니다.");
+    if (match.phase !== "go-stop") throw new RequestError("GO/STOP을 선언할 수 없습니다.");
     if (action.type === "stop") {
       const opponent = match.players[seat === 0 ? 1 : 0];
       match.result = match.mode === "gostop" ? {
@@ -228,7 +227,7 @@ export function applyAction(current: Match, seat: Seat, action: GameAction): Mat
 }
 
 export function gameView(match: Match, seat: Seat): GameView {
-  if (!Number.isInteger(seat) || seat < 0 || seat >= match.players.length) throw new Error("방의 플레이어가 아닙니다.");
+  if (!Number.isInteger(seat) || seat < 0 || seat >= match.players.length) throw new RequestError("방의 플레이어가 아닙니다.");
   const pending = match.pending;
   const engine = turnEngine(match.mode);
   return structuredClone({
