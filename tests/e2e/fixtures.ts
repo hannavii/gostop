@@ -10,13 +10,13 @@ import { hwatuCards } from '../../src/data/cards';
 import { GAME_RULES, type GameMode } from '../../src/game/rules';
 import type { RoomView } from '../../shared/online';
 
-type Scenario = 'normal' | 'timer' | 'rematch';
+type Scenario = 'normal' | 'timer' | 'rematch' | 'reconnect' | 'reconnect-expiry';
 export type Peer = { page: Page; context: BrowserContext; view: RoomView | null };
 type Fixtures = {
   scenario: Scenario;
   site: string;
   peers: Peer[];
-  createRoom: (mode: GameMode) => Promise<Peer[]>;
+  createRoom: (mode: GameMode, options?: { start?: boolean }) => Promise<Peer[]>;
 };
 
 // Complete, non-overlapping fixed deal: first actions have no ambiguous matches.
@@ -70,6 +70,7 @@ export const test = base.extend<Fixtures>({
     let deals = 0;
     const allowedOrigins: string[] = [];
     const server = createOnlineServer({
+      reconnectGraceMs: scenario === 'reconnect-expiry' ? 1800 : scenario === 'reconnect' ? 12_000 : undefined,
       connectionPolicy: { allowedOrigins, allowMissingOrigin: false },
       matchFactory: (mode = "matgo") => fixedMatch(mode, scenario === 'rematch' && deals++ === 0),
       turnTimerFactory: () => scenario === 'timer' ? new TurnTimer(2500) : new TurnTimer(),
@@ -101,7 +102,7 @@ export const test = base.extend<Fixtures>({
     finally { await Promise.all(peers.map(peer => peer.context.close())); }
   },
   createRoom: async ({ browser, viewport, isMobile, hasTouch, site, peers }, provide) => {
-    await provide(async mode => {
+    await provide(async (mode, { start = true } = {}) => {
       for (let seat = 0; seat < GAME_RULES[mode].playerCount; seat++) {
         const context = await browser.newContext({ viewport, isMobile, hasTouch });
         const page = await context.newPage();
@@ -121,8 +122,8 @@ export const test = base.extend<Fixtures>({
         await expect.poll(() => !!peer.view).toBe(true);
         await noOverflow(page);
       }
-      for (const peer of peers) await peer.page.getByRole('button', { name: '준비', exact: true }).click();
-      await peers[0].page.getByRole('button', { name: '게임 시작', exact: true }).click();
+      if (!start) return peers;
+      await startRoom(peers);
       for (const peer of peers) {
         await expect(peer.page.getByTestId('online-board')).toBeVisible();
         await expect.poll(() => !!peer.view?.game).toBe(true);
@@ -133,9 +134,17 @@ export const test = base.extend<Fixtures>({
 });
 export { expect };
 
+export async function startRoom(peers: Peer[]) {
+  for (const peer of peers) {
+    if (!peer.view!.connections[peer.view!.you].ready) await peer.page.getByRole('button', { name: '준비', exact: true }).click();
+  }
+  await peers[0].page.getByRole('button', { name: '게임 시작', exact: true }).click();
+  for (const peer of peers) await expect(peer.page.getByTestId('online-board')).toBeVisible();
+}
+
 export async function noOverflow(page: Page) {
   await expect.poll(() => page.evaluate(() => {
-    const selectors = '.online-page, .online-game-toolbar, .player-area, .table, .go-stop-modal, .game-over-modal';
+    const selectors = '.online-page, .online-game-toolbar, .online-reconnect-notice, .online-player-connection, .player-area, .table, .go-stop-modal, .game-over-modal';
     return document.documentElement.scrollWidth <= innerWidth + 1 &&
       [...document.querySelectorAll(selectors)].filter(e => e.getClientRects().length).every(e => {
         const r = e.getBoundingClientRect(); return r.left >= -1 && r.right <= innerWidth + 1;
@@ -165,7 +174,8 @@ export async function playTurn(peers: Peer[]) {
         await peer.page.getByRole('button', { name: '그냥 한 장 내기', exact: true }).click();
       }
     }
-    await expect.poll(() => peers.every(p => p.view!.game!.revision > game.revision)).toBe(true);
+    await expect.poll(() => peers.filter(p => peer.view!.connections[p.view!.you].connected)
+      .every(p => p.view!.game!.revision > game.revision)).toBe(true);
     if (peers[0].view!.game!.turn !== seat) return;
   }
   throw new Error('Turn did not advance after resolving its decisions');

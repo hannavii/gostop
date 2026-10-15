@@ -3,6 +3,7 @@ import { io, type Socket } from "socket.io-client";
 import { NICKNAME_MAX_LENGTH } from "../../shared/online";
 import RoomCode from "./RoomCode";
 import OnlineGameBoard from "./OnlineGameBoard";
+import ConnectionStatus, { ReconnectNotice } from "./ConnectionStatus";
 import { acceptRoomState, boardPresentationKey } from "./roomState";
 import type { ClientEvents, GameAction, Reply, RoomView, ServerEvents } from "../../shared/online";
 import "./online.css";
@@ -63,7 +64,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
       clearTimeout(retry);
       setConnected(false);
       setRoom(previous => previous ? { ...previous, connections: previous.connections.map(player =>
-        player.seat === previous.you ? { ...player, connected: false } : player) } : null);
+        player.seat === previous.you ? { ...player, connected: false, reconnectDeadline: null } : player) } : null);
       sending.current = false;
       setBusy(false);
       setRestoring(false);
@@ -126,9 +127,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
 
   const game = room?.game;
   const enabled = connected && !busy && !restoring;
-  const offline = room?.connections.filter(c => !c.connected) ?? [];
-  const connectionMessage = offline.length ? `${offline.map(c => c.nickname).join(", ")}님이 재접속 중입니다... 해당 플레이어의 차례는 복구될 때까지 기다립니다.` : "";
-  const displayedMessage = [message, storageWarning, connectionMessage].filter(Boolean).join(" ");
+  const displayedMessage = [message, storageWarning].filter(Boolean).join(" ");
   const validNickname = nickname.trim().length > 0 && nickname.trim().length <= NICKNAME_MAX_LENGTH;
   if (room && game) return <OnlineGameBoard key={boardPresentationKey(room, presentationEpoch)} room={room} game={game}
     enabled={enabled} message={displayedMessage} act={act}
@@ -182,12 +181,13 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
         <section className="online-lobby online-waiting-room">
           <h2>온라인 {room.mode === "gostop" ? "3인 고스톱" : "2인 맞고"}</h2>
           <RoomCode code={room.code} />
+          <ReconnectNotice connections={room.connections} />
           <h3>플레이어 <small>{room.occupancy}/{room.capacity}명</small></h3>
           <ul className="online-players">
             {room.connections.map(player => <li key={player.seat}>
               <div><strong>{player.seat === room.host && <span aria-label="방장">👑 </span>}{player.nickname}</strong>
                 {player.seat === room.you && <small> (나)</small>}
-                <small className={player.connected ? "online-connected" : "online-disconnected"}>{player.connected ? "접속 중" : "재접속 대기"}</small>
+                <ConnectionStatus player={player} />
               </div>
               <span className={player.ready ? "online-ready" : ""}>{player.ready ? "준비 완료" : "준비 중"}</span>
             </li>)}
