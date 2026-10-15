@@ -6,6 +6,7 @@ import MatgoGame from "./MatgoGame";
 import GostopGame from "./GostopGame";
 import OnlineMatgo from "./online/OnlineMatgo";
 import { readReconnectSession } from "./online/reconnectSession";
+import { readRoomInvite } from "./online/inviteUrl";
 
 import {
   GAME_RULES,
@@ -14,7 +15,7 @@ import {
 
 function App() {
   const [selectedMode, setSelectedMode] =
-    useState<GameMode | "online" | null>(() => readReconnectSession() ? "online" : null);
+    useState<GameMode | "online" | null>(() => readReconnectSession() || readRoomInvite(window.location.search).present ? "online" : null);
 
   /* =========================
      게임 선택 화면

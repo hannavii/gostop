@@ -32,6 +32,8 @@
 .online-room-code { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .online-code { user-select: text; cursor: text; }
 .online-room-code small { width: 100%; }
+.online-invite-field { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex-basis: 100%; min-width: 0; max-width: 100%; font-size: 12px; }
+.online-lobby .online-invite-field input { box-sizing: border-box; flex: 1 1 180px; min-width: 0; width: 100%; max-width: 100%; padding: 8px; }
 .online-players { list-style: none; padding: 0; margin: 20px 0; }
 .online-players li { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 12px; border-bottom: 1px solid #ffffff25; overflow-wrap: anywhere; }
 .online-players small.online-connected, .online-players small.online-disconnected { display: block; margin-top: 6px; }
