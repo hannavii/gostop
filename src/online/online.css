@@ -244,3 +244,12 @@
 .online-public-list li > span { white-space: nowrap; }
 .online-public-list button { min-height: 44px; flex-shrink: 0; }
 .online-public-error { color: #ffdf9c; }
+
+.spectator-page { height: 100dvh; min-height: 0; overflow-wrap: anywhere; }
+.spectator-players { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 12px; }
+.spectator-player, .spectator-table { min-width: 0; padding: 12px; border: 1px solid #ffffff30; border-radius: 12px; }
+.spectator-page .card-row { display: flex; flex-wrap: wrap; gap: 4px; max-width: 100%; }
+.spectator-captured { max-height: 140px; overflow-y: auto; }
+.spectator-page button { max-width: 100%; }
+.spectator-page .online-game-toolbar { position: static; max-width: 100%; margin-bottom: 16px; }
+.spectator-hand .card-back { width: 28px; height: 44px; flex: 0 0 28px; }

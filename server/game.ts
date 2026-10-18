@@ -226,20 +226,22 @@ export function applyAction(current: Match, seat: Seat, action: GameAction): Mat
   return match;
 }
 
-export function gameView(match: Match, seat: Seat): GameView {
-  if (!Number.isInteger(seat) || seat < 0 || seat >= match.players.length) throw new RequestError("방의 플레이어가 아닙니다.");
+export function gameView(match: Match, seat: Seat): GameView { return projectGameView(match, seat); }
+export function spectatorGameView(match: Match): GameView { return projectGameView(match, null); }
+function projectGameView(match: Match, seat: Seat | null): GameView {
+  if (seat !== null && (!Number.isInteger(seat) || seat < 0 || seat >= match.players.length)) throw new RequestError("방의 플레이어가 아닙니다.");
   const pending = match.pending;
   const engine = turnEngine(match.mode);
   return structuredClone({
     mode: match.mode, revision: match.revision, turn: match.turn, phase: match.phase,
-    hand: match.players[seat].hand,
-    canPlayHand: canPlayHand(match, seat),
+    hand: seat === null ? [] : match.players[seat].hand,
+    canPlayHand: seat !== null && canPlayHand(match, seat),
     players: match.players.map((p, i) => ({
       seat: i as Seat, handCount: p.hand.length, captured: p.captured,
       score: calculateScore(p.captured).total, goCount: p.goCount,
       bombCount: p.bombCount, bombPassCount: p.bombPassCount, shakeMonths: p.shakeMonths,
     })),
-    specialOptions: canPlayHand(match, seat) ? match.players[seat].hand.flatMap<GameView["specialOptions"][number]>(card => {
+    specialOptions: seat !== null && canPlayHand(match, seat) ? match.players[seat].hand.flatMap<GameView["specialOptions"][number]>(card => {
       if (engine.getBombActionForMonth(match.players[seat].hand, match.floor, card.month)) {
         return [{ cardId: card.id, type: "bomb" as const }];
       }

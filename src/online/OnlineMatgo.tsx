@@ -2,11 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { NICKNAME_MAX_LENGTH } from "../../shared/online";
 import RoomCode from "./RoomCode";
+import SpectatorGameBoard from "./SpectatorGameBoard";
 import OnlineGameBoard from "./OnlineGameBoard";
 import PublicRoomList from './PublicRoomList';
 import ConnectionStatus, { ReconnectNotice } from "./ConnectionStatus";
 import { acceptRoomState, boardPresentationKey } from "./roomState";
-import type { ClientEvents, GameAction, Reply, RoomView, RoomVisibility, ServerEvents } from "../../shared/online";
+import type { ClientEvents, GameAction, Reply, SpectatorRoomView, RoomView, RoomVisibility, ServerEvents } from "../../shared/online";
 import "./online.css";
 import type { GameMode } from "../game/rules";
 import { clearReconnectSession, readReconnectSession, saveReconnectSession } from "./reconnectSession";
@@ -26,6 +27,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
   const [restoring, setRestoring] = useState(false);
   const [storageWarning, setStorageWarning] = useState("");
   const [busy, setBusy] = useState(false);
+  const [spectatorRoom, setSpectatorRoom] = useState<SpectatorRoomView | null>(null);
   const [room, setRoom] = useState<RoomView | null>(null);
   const [nickname, setNickname] = useState("");
   const [code, setCode] = useState(invite.code ?? "");
@@ -44,16 +46,16 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
       if (!session || !socket.connected || disposed) return;
       const connectionId = socket.id;
       setRestoring(true);
-      setMessage("기존 방과 좌석을 복구하는 중입니다.");
+      setMessage(session.role === "spectator" ? "관전을 복구하는 중입니다." : "기존 방과 좌석을 복구하는 중입니다.");
       try {
-        const reply = await socket.timeout(5000).emitWithAck("room:resume", session);
+        const reply = await socket.timeout(5000).emitWithAck(session.role === "spectator" ? "room:spectator-resume" : "room:resume", { roomCode: session.roomCode, token: session.token });
         if (disposed || !socket.connected || socket.id !== connectionId) return;
         setRestoring(false);
         if (!reply.ok) {
           sessionRef.current = null;
           setHasSession(false);
           clearReconnectSession();
-          setRoom(null);
+          setRoom(null); setSpectatorRoom(null);
           setMessage(reply.error);
         }
       } catch {
@@ -80,10 +82,18 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
       sending.current = false;
       setBusy(false);
       setRestoring(false);
-      if (reason !== "io server disconnect") setMessage("연결이 끊겼습니다. 재연결되면 같은 좌석으로 복구합니다.");
+      if (reason !== "io server disconnect") setMessage(sessionRef.current?.role === "spectator"
+        ? "연결이 끊겼습니다. 재연결되면 관전을 복구합니다."
+        : "연결이 끊겼습니다. 재연결되면 같은 좌석으로 복구합니다.");
     });
     socket.on("connect_error", () => {
       setMessage("서버에 연결할 수 없습니다. 서버 실행 상태를 확인해주세요.");
+    });
+    socket.on("room:spectator-state", view => {
+      clearRoomInvite();
+      setInvitePending(false);
+      setSpectatorRoom(previous => acceptRoomState(previous, view));
+      setMessage("");
     });
     socket.on("room:state", view => {
       clearRoomInvite();
@@ -102,7 +112,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
       sessionRef.current = null;
       setHasSession(false);
       clearReconnectSession();
-      setRestoring(false); setStorageWarning(""); setRoom(null); setMessage(reason);
+      setRestoring(false); setStorageWarning(""); setRoom(null); setSpectatorRoom(null); setMessage(reason);
     });
     socket.connect();
     return () => {
@@ -145,6 +155,8 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
   const enabled = connected && !busy && !restoring;
   const displayedMessage = [message, storageWarning].filter(Boolean).join(" ");
   const validNickname = nickname.trim().length > 0 && nickname.trim().length <= NICKNAME_MAX_LENGTH;
+  if (spectatorRoom?.game) return <SpectatorGameBoard room={spectatorRoom} enabled={enabled} message={displayedMessage}
+    onLeave={() => void request(s => s.timeout(5000).emitWithAck("room:leave"))} />;
   if (room && game) return <OnlineGameBoard key={boardPresentationKey(room, presentationEpoch)} room={room} game={game}
     enabled={enabled} message={displayedMessage} act={act}
     onRematch={ready => void request(s => s.timeout(5000).emitWithAck("game:rematch", {
@@ -195,6 +207,8 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
             <input id="online-room-code" value={code} maxLength={6} autoComplete="off"
               onChange={event => setCode(event.target.value.toUpperCase())} placeholder="6자리 코드" />
             <button disabled={!enabled || !validNickname || !/^[A-Z0-9]{6}$/.test(code.trim())}>참가하기</button>
+            <button type="button" disabled={!enabled || !/^[A-Z0-9]{6}$/.test(code.trim())}
+              onClick={() => void request(s => s.timeout(5000).emitWithAck("room:spectate", { roomCode: code.trim().toUpperCase() }))}>관전하기</button>
           </form>
           {!restoring && !hasSession && !invitePending && <PublicRoomList getSocket={getSocket}
             connected={connected} enabled={enabled} validNickname={validNickname}

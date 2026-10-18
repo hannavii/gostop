@@ -10,7 +10,8 @@ export function readReconnectSession(): ReconnectSession | null {
     if (value && typeof value === "object" && "roomCode" in value && "token" in value &&
       typeof value.roomCode === "string" && /^[A-Z0-9]{6}$/.test(value.roomCode) &&
       typeof value.token === "string" && /^[a-f0-9]{64}$/.test(value.token)) {
-      return { roomCode: value.roomCode, token: value.token };
+      if ("role" in value && value.role !== "spectator") { clearReconnectSession(); return null; }
+      return { roomCode: value.roomCode, token: value.token, ...("role" in value ? { role: "spectator" as const } : {}) };
     }
   } catch { /* Missing or unavailable browser storage must not break offline play. */ }
   clearReconnectSession();
