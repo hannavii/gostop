@@ -31,7 +31,7 @@ export type TurnTimerView = { turnDeadline: number; startsAt: number; timedPlaye
 export type RematchRequest = { roomCode: string; round: number; ready: boolean };
 export type Reply = { ok: true } | { ok: false; error: string };
 export type Ack = (reply: Reply) => void;
-export type ReconnectSession = { roomCode: string; token: string };
+export type ReconnectSession = { roomCode: string; token: string; role?: "spectator" };
 
 // Explicit public projection. Never add the server's hands, pile or pending state here.
 export type GameView = {
@@ -62,7 +62,11 @@ export type RoomView = { code: string; mode: GameMode; capacity: number; you: Se
   connections: { seat: Seat; nickname: string; ready: boolean; rematchReady: boolean; connected: boolean; reconnectDeadline: number | null }[];
   game: GameView | null };
 
+export type SpectatorRoomView = Omit<RoomView, "you"> & { role: "spectator"; you: null };
+
 export interface ClientEvents {
+  "room:spectate": (request: { roomCode: string }, ack: Ack) => void;
+  "room:spectator-resume": (session: ReconnectSession, ack: Ack) => void;
   "room:create-options": (request: CreateRoomRequest, ack: Ack) => void;
   "room:list": (ack: Ack) => void;
   "room:create": (nickname: string, ack: Ack) => void;
@@ -77,6 +81,7 @@ export interface ClientEvents {
   "game:action": (action: GameAction, ack: Ack) => void;
 }
 export interface ServerEvents {
+  "room:spectator-state": (view: SpectatorRoomView) => void;
   "room:list": (rooms: PublicRoomSummary[]) => void;
   "room:list-changed": () => void;
   "room:session": (session: ReconnectSession) => void;

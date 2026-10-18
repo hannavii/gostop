@@ -42,3 +42,13 @@ test("disabled storage fails gracefully so offline modes remain usable", t => {
   assert.equal(saveReconnectSession({ roomCode: "ABC123", token: "b".repeat(64) }), false);
   assert.doesNotThrow(clearReconnectSession);
 });
+
+test('spectator storage preserves its role and rejects unknown roles', t => {
+  const data = storage(t);
+  const session = { roomCode: 'ABC123', token: 'c'.repeat(64), role: 'spectator' as const };
+  assert.equal(saveReconnectSession(session), true);
+  assert.deepEqual(readReconnectSession(), session);
+  data.set(RECONNECT_STORAGE_KEY, JSON.stringify({ ...session, role: 'host' }));
+  assert.equal(readReconnectSession(), null);
+  assert.equal(data.has(RECONNECT_STORAGE_KEY), false);
+});

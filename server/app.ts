@@ -1,4 +1,4 @@
-import { RequestError, REQUEST_FAILED, validateCreateRoom, validateNickname, validateReconnect, validateRematch } from './validation';
+import { RequestError, REQUEST_FAILED, record, validRoomCode, validateCreateRoom, validateNickname, validateReconnect, validateRematch } from './validation';
 import { TurnTimer } from "./turnTimer";
 import { GameLog } from './gameLog';
 import express from "express";
@@ -6,14 +6,16 @@ import { createServer } from "node:http";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { Server } from "socket.io";
 import type { Ack, ClientEvents, ServerEvents, Seat, Reply, RoomVisibility, PublicRoomSummary } from "../shared/online";
-import { applyAction, createMatch, gameView, parseAction, type Match } from "./game";
+import { applyAction, createMatch, gameView, spectatorGameView, parseAction, type Match } from "./game";
 import { GAME_RULES, type GameMode } from "../src/game/rules";
 import { readServerConfig } from "./config";
 
+export const MAX_SPECTATORS_PER_ROOM = 20;
+type Spectator = { socketId: string | null; tokenHash: Buffer; deadline: number | null };
 export const RECONNECT_GRACE_MS = 60_000;
 type Member = { nickname: string; ready: boolean; rematchReady: boolean; socketId: string | null; tokenHash: Buffer; deadline: number | null;
   timer: ReturnType<typeof setTimeout> | null };
-type Room = { code: string; mode: GameMode; visibility: RoomVisibility; createdSequence: number; members: Member[]; host: Member | null; match: Match | null; round: number; turnTimer: TurnTimer; log: GameLog };
+type Room = { code: string; mode: GameMode; visibility: RoomVisibility; createdSequence: number; members: Member[]; spectators: Spectator[]; host: Member | null; match: Match | null; round: number; turnTimer: TurnTimer; log: GameLog };
 const hashToken = (token: string) => createHash("sha256").update(token).digest();
 
 export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matchFactory = createMatch,
@@ -79,6 +81,20 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
     }
   }
 
+  function publishSpectators(room: Room) {
+    for (const spectator of room.spectators) {
+      if (!spectator.socketId) continue;
+      io.to(spectator.socketId).emit("room:spectator-state", {
+        code: room.code, role: "spectator", you: null, round: room.round,
+        mode: room.mode, capacity: GAME_RULES[room.mode].playerCount, occupancy: room.members.length,
+        host: room.members.indexOf(room.host!) as Seat, turnTimer: room.turnTimer.view, logs: room.log.entries,
+        connections: room.members.map((m, seat) => ({ seat: seat as Seat, nickname: m.nickname, ready: m.ready,
+          rematchReady: m.rematchReady, connected: m.socketId !== null, reconnectDeadline: m.deadline })),
+        game: room.match ? spectatorGameView(room.match) : null,
+      });
+    }
+  }
+
   function publish(room: Room) {
     room.turnTimer.sync(room.match, room.members.map(m => m.socketId !== null), () => {
       if (rooms.get(room.code) !== room) return;
@@ -98,6 +114,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
         game: room.match ? gameView(room.match, seat as Seat) : null,
       });
     });
+    publishSpectators(room);
   }
 
   function commitAction(room: Room, seat: Seat, action: Parameters<typeof applyAction>[2], automatic = false) {
@@ -135,6 +152,12 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       if (member.socketId) {
         membership.delete(member.socketId);
         io.to(member.socketId).emit("room:closed", reason);
+      }
+    }
+    for (const spectator of room.spectators) {
+      if (spectator.socketId) {
+        membership.delete(spectator.socketId);
+        io.to(spectator.socketId).emit("room:closed", reason);
       }
     }
     notifyPublicRooms();
@@ -182,7 +205,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
 
   io.on("connection", socket => {
     const arities = new Map<string, number>([
-      ['room:create', 1], ['room:create-mode', 2], ['room:join', 2], ['room:resume', 1],
+      ['room:spectate', 1], ['room:spectator-resume', 1], ['room:create', 1], ['room:create-mode', 2], ['room:join', 2], ['room:resume', 1],
       ['room:ready', 1], ['room:start', 0], ['room:leave', 0], ['room:sync', 0],
       ['game:rematch', 1], ['game:action', 1],
       ['room:create-options', 1], ['room:list', 0],
@@ -213,7 +236,9 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
     function currentRoom() {
       const code = membership.get(socket.id);
       if (!code) throw new RequestError("먼저 방을 만들거나 참가해주세요.");
-      return activeRoom(code);
+      const room = activeRoom(code);
+      if (!room.members.some(m => m.socketId === socket.id)) throw new RequestError("관전자는 플레이어 행동을 할 수 없습니다.");
+      return room;
     }
     function requireLobby() {
       if (membership.has(socket.id)) throw new RequestError("이미 방에 참가 중입니다.");
@@ -234,12 +259,48 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       if (rooms.size >= 1000) throw new RequestError("현재 생성 가능한 방이 가득 찼습니다.");
       let code: string;
       do { code = randomInt(0, 36 ** 6).toString(36).toUpperCase().padStart(6, "0"); } while (rooms.has(code));
-      const room: Room = { code, mode, visibility, createdSequence: ++roomSequence, members: [], host: null, match: null, round: 0, turnTimer: turnTimerFactory(), log: new GameLog(code) };
+      const room: Room = { code, mode, visibility, createdSequence: ++roomSequence, members: [], spectators: [], host: null, match: null, round: 0, turnTimer: turnTimerFactory(), log: new GameLog(code) };
       rooms.set(code, room);
       addMember(room, name);
       publish(room);
       notifyPublicRooms();
     }
+    function spectatorSession(room: Room, spectator: Spectator, token: string) {
+      spectator.socketId = socket.id;
+      spectator.deadline = null;
+      membership.set(socket.id, room.code);
+      listWatchers.delete(socket.id);
+      socket.emit("room:session", { roomCode: room.code, token, role: "spectator" });
+      publishSpectators(room);
+    }
+    socket.on("room:spectate", (input, ack) => handle(ack, 'room:spectate', () => {
+      requireLobby();
+      const request = record(input, ['roomCode'], '잘못된 관전 요청입니다.');
+      if (!validRoomCode(request.roomCode)) throw new RequestError('방 코드를 확인해주세요.');
+      const room = activeRoom(request.roomCode);
+      if (!room.match) throw new RequestError('시작된 게임만 관전할 수 있습니다.');
+      room.spectators = room.spectators.filter(s => s.deadline === null || s.deadline > Date.now());
+      if (room.spectators.length >= MAX_SPECTATORS_PER_ROOM) throw new RequestError('관전 인원이 가득 찼습니다.');
+      const token = randomBytes(32).toString('hex');
+      const spectator: Spectator = { socketId: null, tokenHash: hashToken(token), deadline: null };
+      room.spectators.push(spectator);
+      spectatorSession(room, spectator, token);
+    }));
+    socket.on("room:spectator-resume", (input, ack) => handle(ack, 'room:spectator-resume', () => {
+      const session = validateReconnect(input);
+      const room = activeRoom(session.roomCode);
+      const hash = hashToken(session.token);
+      const spectator = room.spectators.find(s => timingSafeEqual(s.tokenHash, hash) &&
+        (s.deadline === null || s.deadline > Date.now()));
+      if (!spectator || membership.has(socket.id) && spectator.socketId !== socket.id) throw new RequestError('관전 복구 정보를 확인할 수 없습니다.');
+      if (spectator.socketId && spectator.socketId !== socket.id) {
+        const oldId = spectator.socketId;
+        membership.delete(oldId);
+        io.to(oldId).emit('room:closed', '다른 연결에서 관전을 복구했습니다.');
+        io.sockets.sockets.get(oldId)?.disconnect(true);
+      }
+      spectatorSession(room, spectator, session.token);
+    }));
     // Both creation events require a validated nickname.
     socket.on("room:create", (name, ack) => handle(ack, 'room:create', () => createRoom("matgo", name)));
     socket.on("room:create-mode", (mode, name, ack) => handle(ack, 'room:create-mode', () => createRoom(mode, name)));
@@ -317,10 +378,24 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       notifyPublicRooms();
     }));
     socket.on("room:leave", ack => handle(ack, 'room:leave', () => {
+      const code = membership.get(socket.id);
+      const watched = code ? rooms.get(code) : undefined;
+      const spectator = watched?.spectators.find(s => s.socketId === socket.id);
+      if (watched && spectator) {
+        watched.spectators = watched.spectators.filter(s => s !== spectator);
+        membership.delete(socket.id);
+        socket.emit('room:closed', '관전을 종료했습니다.');
+        return;
+      }
       const room = currentRoom();
       removeMember(room, room.members.find(m => m.socketId === socket.id)!, "플레이어가 방을 나갔습니다.");
     }));
-    socket.on("room:sync", ack => handle(ack, 'room:sync', () => publish(currentRoom())));
+    socket.on("room:sync", ack => handle(ack, 'room:sync', () => {
+      const code = membership.get(socket.id);
+      const room = code ? rooms.get(code) : undefined;
+      if (room?.spectators.some(s => s.socketId === socket.id)) publishSpectators(room);
+      else publish(currentRoom());
+    }));
     socket.on("game:rematch", (input, ack) => handle(ack, 'game:rematch', () => {
       input = validateRematch(input);
       const room = currentRoom();
@@ -348,6 +423,12 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       const code = membership.get(socket.id);
       membership.delete(socket.id);
       const room = code ? rooms.get(code) : undefined;
+      const spectator = room?.spectators.find(s => s.socketId === socket.id);
+      if (spectator) {
+        spectator.socketId = null;
+        spectator.deadline = Date.now() + reconnectGraceMs;
+        return;
+      }
       const member = room?.members.find(m => m.socketId === socket.id);
       if (!room || !member) return;
       background(room, 'disconnect', () => {
