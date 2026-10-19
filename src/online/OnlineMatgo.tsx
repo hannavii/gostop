@@ -1,3 +1,5 @@
+import RoomChatLayout from './RoomChat';
+import type { ChatState } from '../../shared/online';
 import RecentGames from './RecentGames';
 import { savePlayerResult } from './recentGameHistory';
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -17,6 +19,7 @@ import { clearRoomInvite, INVALID_INVITE_MESSAGE, readRoomInvite } from './invit
 
 type OnlineSocket = Socket<ServerEvents, ClientEvents>;
 export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
+  const [chat, setChat] = useState<ChatState | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const socketRef = useRef<OnlineSocket | null>(null);
   const getSocket = useCallback(() => socketRef.current, []);
@@ -58,7 +61,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
           sessionRef.current = null;
           setHasSession(false);
           clearReconnectSession();
-          setRoom(null); setSpectatorRoom(null);
+          setRoom(null); setSpectatorRoom(null); setChat(null);
           setMessage(reply.error);
         }
       } catch {
@@ -92,6 +95,9 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
     socket.on("connect_error", () => {
       setMessage("서버에 연결할 수 없습니다. 서버 실행 상태를 확인해주세요.");
     });
+    socket.on('chat:state', state => {
+      if (sessionRef.current?.roomCode === state.roomCode) setChat(state);
+    });
     socket.on("room:spectator-state", view => {
       clearRoomInvite();
       setInvitePending(false);
@@ -112,6 +118,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
       setStorageWarning(saveReconnectSession(session) ? "" : "브라우저 저장소를 사용할 수 없어 새로고침 복구가 불가능합니다.");
     });
     socket.on("room:closed", reason => {
+      setChat(null);
       clearTimeout(retry);
       sessionRef.current = null;
       setHasSession(false);
@@ -160,19 +167,26 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
   const displayedMessage = [message, storageWarning].filter(Boolean).join(" ");
   const validNickname = nickname.trim().length > 0 && nickname.trim().length <= NICKNAME_MAX_LENGTH;
   if (showHistory) return <RecentGames onBack={() => setShowHistory(false)} />;
-  if (spectatorRoom?.game) return <SpectatorGameBoard room={spectatorRoom} enabled={enabled} message={displayedMessage}
-    onLeave={() => void request(s => s.timeout(5000).emitWithAck("room:leave"))} />;
-  if (room && game) return <OnlineGameBoard key={boardPresentationKey(room, presentationEpoch)} room={room} game={game}
+  const chatCode = room?.code ?? spectatorRoom?.code ?? null;
+  const chatProps = { roomCode: chatCode, state: chat, enabled: connected && !restoring,
+    send: async (message: string): Promise<Reply> => {
+      const socket = socketRef.current;
+      if (!socket?.connected || !chatCode || restoring) return { ok: false, error: '연결 복구 후 채팅할 수 있습니다.' };
+      return socket.timeout(5000).emitWithAck('chat:send', { roomCode: chatCode, message });
+    } };
+  if (spectatorRoom?.game) return <RoomChatLayout {...chatProps}><SpectatorGameBoard room={spectatorRoom} enabled={enabled} message={displayedMessage}
+    onLeave={() => void request(s => s.timeout(5000).emitWithAck("room:leave"))} /></RoomChatLayout>;
+  if (room && game) return <RoomChatLayout {...chatProps}><OnlineGameBoard key={boardPresentationKey(room, presentationEpoch)} room={room} game={game}
     onHistory={() => setShowHistory(true)}
     enabled={enabled} message={displayedMessage} act={act}
     onRematch={ready => void request(s => s.timeout(5000).emitWithAck("game:rematch", {
       roomCode: room.code, round: room.round, ready,
     }))}
     onSync={() => void request(s => s.timeout(5000).emitWithAck("room:sync"))}
-    onLeave={() => void request(s => s.timeout(5000).emitWithAck("room:leave"))} />;
+    onLeave={() => void request(s => s.timeout(5000).emitWithAck("room:leave"))} /></RoomChatLayout>;
 
   return (
-    <main className="online-page">
+    <RoomChatLayout {...chatProps}><main className="online-page">
       <header className="online-header">
         <button type="button" disabled={busy || restoring || !!room && !connected} onClick={() => {
           if (!room) { clearRoomInvite(); onBack(); }
@@ -251,6 +265,6 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
           <p>모든 플레이어가 접속하고 준비를 완료하면 방장이 게임을 시작할 수 있습니다.</p>
         </section>
       )}
-    </main>
+    </main></RoomChatLayout>
   );
 }
