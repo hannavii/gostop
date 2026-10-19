@@ -8,11 +8,11 @@ import { createMatch, type Match } from '../../server/game';
 import { TurnTimer } from '../../server/turnTimer';
 import { hwatuCards } from '../../src/data/cards';
 import { GAME_RULES, type GameMode } from '../../src/game/rules';
-import type { RoomView, SpectatorRoomView } from '../../shared/online';
+import type { ChatState, RoomView, SpectatorRoomView } from '../../shared/online';
 import { settlementMatch } from '../settlement-fixture';
 
 type Scenario = 'history' | 'normal' | 'timer' | 'rematch' | 'reconnect' | 'reconnect-expiry' | 'settlement';
-export type Peer = { page: Page; context: BrowserContext; view: RoomView | null; spectatorView?: SpectatorRoomView };
+export type Peer = { page: Page; context: BrowserContext; view: RoomView | null; spectatorView?: SpectatorRoomView; chat?: ChatState };
 type Fixtures = {
   scenario: Scenario;
   site: string;
@@ -50,6 +50,7 @@ function observe(peer: Peer) {
     for (const part of payload.split('\x1e')) {
       if (!part.startsWith('42[')) continue;
       const [event, view] = JSON.parse(part.slice(2));
+      if (event === 'chat:state') { peer.chat = view; continue; }
       if (event === 'room:spectator-state') { peer.spectatorView = view; continue; }
       if (event !== 'room:state') continue;
       const next = view as RoomView, old = peer.view;

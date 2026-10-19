@@ -1,9 +1,18 @@
-import { NICKNAME_MAX_LENGTH } from '../shared/online';
+import { MAX_CHAT_MESSAGE_LENGTH, NICKNAME_MAX_LENGTH } from '../shared/online';
 import type { CreateRoomRequest, ReconnectSession, RematchRequest } from '../shared/online';
 
 // Only these deliberate, user-facing failures may cross the socket boundary.
 export class RequestError extends Error {}
 export const REQUEST_FAILED = '요청 처리에 실패했습니다.';
+
+export function validateChat(input: unknown) {
+  const error = `올바른 방과 1~${MAX_CHAT_MESSAGE_LENGTH}자의 한 줄 메시지를 입력해주세요.`;
+  const a = record(input, ['roomCode', 'message'], error);
+  if (!validRoomCode(a.roomCode) || typeof a.message !== 'string' ||
+    a.message.length > MAX_CHAT_MESSAGE_LENGTH || !a.message.trim() ||
+    /[\p{Cc}\u200b\u2028\u2029\u202a-\u202e\u2066-\u2069\ufeff]/u.test(a.message)) throw new RequestError(error);
+  return { roomCode: a.roomCode, message: a.message.trim() };
+}
 
 export function record(input: unknown, keys: readonly string[], message: string): Record<string, unknown> {
   if (!input || typeof input !== 'object' || Array.isArray(input) ||

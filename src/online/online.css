@@ -258,3 +258,30 @@
 .recent-game { min-width: 0; padding: 16px; margin: 16px 0; border: 1px solid #697b70; border-radius: 12px; }
 .recent-games button { min-height: 44px; max-width: 100%; white-space: normal; }
 .recent-game .online-settlement-detail { min-width: 0; }
+
+.online-room-layout { display: grid; grid-template-columns: minmax(0, 1fr) auto; height: 100dvh; background: #174c36; color: white; }
+.online-room-content { min-width: 0; min-height: 0; overflow: hidden; position: relative; transform: translateZ(0); }
+.online-room-layout .online-room-content > :is(.game, .online-page) { height: 100%; min-height: 0; }
+.room-chat { width: 76px; padding: 6px; min-width: 0; overflow-wrap: anywhere; border-left: 1px solid #ffffff40; background: #173d32; }
+.room-chat[data-open="true"] { width: 300px; }
+.room-chat button { min-height: 44px; padding: 8px; border: 1px solid #ffffff60; border-radius: 7px; color: white; background: #174c36; cursor: pointer; }
+.room-chat button:disabled { opacity: .5; cursor: default; }
+.room-chat button:focus-visible, .room-chat input:focus-visible { outline: 3px solid #ffdf9c; outline-offset: 1px; }
+.room-chat-panel { display: grid; grid-template-rows: minmax(0, 1fr) auto; max-height: min(420px, calc(100dvh - 64px)); gap: 6px; }
+.room-chat-messages { min-height: 0; max-height: 280px; overflow-y: auto; overscroll-behavior: contain; padding: 4px; }
+.room-chat-messages ol { margin: 0; padding: 0; list-style: none; }
+.room-chat-messages li { padding: 4px 0; font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
+.room-chat-messages time { font-size: 10px; color: #c0d3c8; }
+.chat-system { color: #d8dfc2; }
+.room-chat-label { display: block; font-size: 11px; margin: 5px 0; }
+.room-chat-compose { display: flex; gap: 4px; }
+.room-chat-compose input { width: 100%; min-width: 0; font-size: 16px; border: 1px solid #ffffff60; border-radius: 6px; padding: 8px; }
+.room-chat-compose button { flex-shrink: 0; }
+.room-chat-panel p { margin: 4px 0; font-size: 12px; }
+@media (max-width: 700px) {
+  .online-room-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+  .room-chat, .room-chat[data-open="true"] { width: 100%; border-left: 0; border-top: 1px solid #ffffff40; padding: 4px max(10px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); }
+  .room-chat-panel { max-height: min(230px, 38dvh); }
+  .room-chat-messages { max-height: 100px; }
+  .online-room-content :is(.go-stop-overlay, .game-over-overlay) { position: absolute; }
+}

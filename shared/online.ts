@@ -5,6 +5,16 @@ import type { GostopSettlementResult } from "../src/game/gostopSettlement";
 import type { GameMode } from "../src/game/rules";
 
 export const NICKNAME_MAX_LENGTH = 12;
+export const MAX_CHAT_MESSAGE_LENGTH = 200;
+export const MAX_CHAT_HISTORY = 100;
+export const CHAT_COOLDOWN_MS = 500;
+export type ChatSender = { nickname: string; role: 'player'; seat: Seat } | { nickname: string; role: 'spectator' };
+export type ChatMessage = { id: string; createdAt: string } & (
+  { type: 'user'; sender: ChatSender; text: string } |
+  { type: 'system'; event: 'join' | 'leave' | 'disconnect' | 'reconnect'; text: string }
+);
+export type ChatState = { roomCode: string; messages: ChatMessage[] };
+export type ChatRequest = { roomCode: string; message: string };
 export type RoomVisibility = 'private' | 'public';
 export type CreateRoomRequest = { mode: GameMode; nickname: string; visibility: RoomVisibility };
 export type PublicRoomSummary = { roomCode: string; mode: GameMode; playerCount: number; maxPlayers: number };
@@ -65,6 +75,7 @@ export type RoomView = { code: string; mode: GameMode; capacity: number; you: Se
 export type SpectatorRoomView = Omit<RoomView, "you" | "completedResult"> & { role: "spectator"; you: null };
 
 export interface ClientEvents {
+  'chat:send': (request: ChatRequest, ack: Ack) => void;
   "room:spectate": (request: { roomCode: string }, ack: Ack) => void;
   "room:spectator-resume": (session: ReconnectSession, ack: Ack) => void;
   "room:create-options": (request: CreateRoomRequest, ack: Ack) => void;
@@ -81,6 +92,7 @@ export interface ClientEvents {
   "game:action": (action: GameAction, ack: Ack) => void;
 }
 export interface ServerEvents {
+  'chat:state': (state: ChatState) => void;
   "room:spectator-state": (view: SpectatorRoomView) => void;
   "room:list": (rooms: PublicRoomSummary[]) => void;
   "room:list-changed": () => void;
