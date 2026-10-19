@@ -18,8 +18,9 @@ type Props = {
   act: (type: GameAction["type"], cardId?: string) => void;
   onRematch: (ready: boolean) => void;
   onSync: () => void; onLeave: () => void;
+  onHistory?: () => void;
 };
-export default function OnlineGameBoard({ room, game: latestGame, enabled, message, act, onRematch, onSync, onLeave }: Props) {
+export default function OnlineGameBoard({ room, game: latestGame, enabled, message, act, onRematch, onSync, onLeave, onHistory }: Props) {
   const { game, visual, animating } = usePresentation(latestGame, room.you);
   const [detail, setDetail] = useState<Seat | null>(null);
   const [prompt, setPrompt] = useState<{ revision: number; cardId: string; type: "bomb" | "shake" } | null>(null);
@@ -190,6 +191,7 @@ export default function OnlineGameBoard({ room, game: latestGame, enabled, messa
         </li>)}</ul>
       </section>
       <div className="rematch-actions">
+        {onHistory && <button type="button" onClick={onHistory}>최근 경기</button>}
         <button className="rematch-button" disabled={!canAct} onClick={() => onRematch(!room.connections[room.you].rematchReady)}>
           {room.connections[room.you].rematchReady ? "다시하기 취소" : "다시하기"}
         </button>

@@ -253,3 +253,8 @@
 .spectator-page button { max-width: 100%; }
 .spectator-page .online-game-toolbar { position: static; max-width: 100%; margin-bottom: 16px; }
 .spectator-hand .card-back { width: 28px; height: 44px; flex: 0 0 28px; }
+
+.recent-games { max-width: 800px; margin: auto; overflow-wrap: anywhere; }
+.recent-game { min-width: 0; padding: 16px; margin: 16px 0; border: 1px solid #697b70; border-radius: 12px; }
+.recent-games button { min-height: 44px; max-width: 100%; white-space: normal; }
+.recent-game .online-settlement-detail { min-width: 0; }
