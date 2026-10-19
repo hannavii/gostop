@@ -1,3 +1,5 @@
+import RecentGames from './RecentGames';
+import { savePlayerResult } from './recentGameHistory';
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { NICKNAME_MAX_LENGTH } from "../../shared/online";
@@ -15,6 +17,7 @@ import { clearRoomInvite, INVALID_INVITE_MESSAGE, readRoomInvite } from './invit
 
 type OnlineSocket = Socket<ServerEvents, ClientEvents>;
 export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
+  const [showHistory, setShowHistory] = useState(false);
   const socketRef = useRef<OnlineSocket | null>(null);
   const getSocket = useCallback(() => socketRef.current, []);
   const sending = useRef(false);
@@ -96,6 +99,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
       setMessage("");
     });
     socket.on("room:state", view => {
+      if (!savePlayerResult(view)) setStorageWarning("최근 경기 기록을 저장하지 못했습니다. 게임은 계속할 수 있습니다.");
       clearRoomInvite();
       setInvitePending(false);
       if (resetPresentation) { setPresentationEpoch(epoch => epoch + 1); resetPresentation = false; }
@@ -155,9 +159,11 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
   const enabled = connected && !busy && !restoring;
   const displayedMessage = [message, storageWarning].filter(Boolean).join(" ");
   const validNickname = nickname.trim().length > 0 && nickname.trim().length <= NICKNAME_MAX_LENGTH;
+  if (showHistory) return <RecentGames onBack={() => setShowHistory(false)} />;
   if (spectatorRoom?.game) return <SpectatorGameBoard room={spectatorRoom} enabled={enabled} message={displayedMessage}
     onLeave={() => void request(s => s.timeout(5000).emitWithAck("room:leave"))} />;
   if (room && game) return <OnlineGameBoard key={boardPresentationKey(room, presentationEpoch)} room={room} game={game}
+    onHistory={() => setShowHistory(true)}
     enabled={enabled} message={displayedMessage} act={act}
     onRematch={ready => void request(s => s.timeout(5000).emitWithAck("game:rematch", {
       roomCode: room.code, round: room.round, ready,
@@ -177,6 +183,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
           });
         }}>← 게임 선택</button>
         <h1>온라인 맞고 / 고스톱</h1>
+        <button type="button" onClick={() => setShowHistory(true)}>최근 경기</button>
         <span>{connected ? "연결됨" : "연결 중"}</span>
       </header>
       {displayedMessage && <p className="online-message" role="status">{displayedMessage}</p>}

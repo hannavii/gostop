@@ -1,4 +1,5 @@
 import { RequestError, REQUEST_FAILED, record, validRoomCode, validateCreateRoom, validateNickname, validateReconnect, validateRematch } from './validation';
+import { createGameResult } from './gameResult';
 import { TurnTimer } from "./turnTimer";
 import { GameLog } from './gameLog';
 import express from "express";
@@ -15,7 +16,7 @@ type Spectator = { socketId: string | null; tokenHash: Buffer; deadline: number 
 export const RECONNECT_GRACE_MS = 60_000;
 type Member = { nickname: string; ready: boolean; rematchReady: boolean; socketId: string | null; tokenHash: Buffer; deadline: number | null;
   timer: ReturnType<typeof setTimeout> | null };
-type Room = { code: string; mode: GameMode; visibility: RoomVisibility; createdSequence: number; members: Member[]; spectators: Spectator[]; host: Member | null; match: Match | null; round: number; turnTimer: TurnTimer; log: GameLog };
+type Room = { completedResult?: import('../shared/online').GameResultRecord | null; code: string; mode: GameMode; visibility: RoomVisibility; createdSequence: number; members: Member[]; spectators: Spectator[]; host: Member | null; match: Match | null; round: number; turnTimer: TurnTimer; log: GameLog };
 const hashToken = (token: string) => createHash("sha256").update(token).digest();
 
 export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matchFactory = createMatch,
@@ -107,7 +108,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       if (!member.socketId) return;
       // Never broadcast raw Room/Match, even to members of the same room.
       io.to(member.socketId).emit("room:state", {
-        code: room.code, round: room.round, turnTimer: room.turnTimer.view, logs: room.log.entries, you: seat as Seat, occupancy: room.members.length,
+        completedResult: room.completedResult ?? null, code: room.code, round: room.round, turnTimer: room.turnTimer.view, logs: room.log.entries, you: seat as Seat, occupancy: room.members.length,
         host: room.members.indexOf(room.host!) as Seat,
         mode: room.mode, capacity: GAME_RULES[room.mode].playerCount,
         connections: room.members.map((m, i) => ({ seat: i as Seat, nickname: m.nickname, ready: m.ready, rematchReady: m.rematchReady, connected: m.socketId !== null, reconnectDeadline: m.deadline })),
@@ -122,8 +123,11 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
     const after = applyAction(before, seat, action);
     const log = room.log.copy();
     log.action(before, after, seat, action, automatic);
+    const completedResult = after.phase === 'finished' && !room.completedResult
+      ? createGameResult(after, room.round, room.members.map(m => m.nickname), log.specialEvents) : room.completedResult;
     room.log = log;
     room.match = after;
+    room.completedResult = completedResult;
   }
 
   function prepareRematch(room: Room, reconnecting?: Member) {
@@ -140,6 +144,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
     log.start(room.round + 1, match.revision);
     room.match = match;
     room.round++;
+    room.completedResult = null;
     room.log = log;
     room.members.forEach(member => { member.rematchReady = false; });
   }
@@ -373,6 +378,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       log.start(room.round + 1, match.revision);
       room.match = match;
       room.round++;
+      room.completedResult = null;
       room.log = log;
       publish(room);
       notifyPublicRooms();

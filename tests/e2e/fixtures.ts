@@ -11,7 +11,7 @@ import { GAME_RULES, type GameMode } from '../../src/game/rules';
 import type { RoomView, SpectatorRoomView } from '../../shared/online';
 import { settlementMatch } from '../settlement-fixture';
 
-type Scenario = 'normal' | 'timer' | 'rematch' | 'reconnect' | 'reconnect-expiry' | 'settlement';
+type Scenario = 'history' | 'normal' | 'timer' | 'rematch' | 'reconnect' | 'reconnect-expiry' | 'settlement';
 export type Peer = { page: Page; context: BrowserContext; view: RoomView | null; spectatorView?: SpectatorRoomView };
 type Fixtures = {
   scenario: Scenario;
@@ -76,7 +76,7 @@ export const test = base.extend<Fixtures>({
       reconnectGraceMs: scenario === 'reconnect-expiry' ? 1800 : scenario === 'reconnect' ? 12_000 : undefined,
       connectionPolicy: { allowedOrigins, allowMissingOrigin: false },
       matchFactory: (mode = "matgo") => scenario === 'settlement' && deals++ === 0
-        ? settlementMatch(mode) : fixedMatch(mode, scenario === 'rematch' && deals++ === 0),
+        ? settlementMatch(mode) : fixedMatch(mode, scenario === 'history' || scenario === 'rematch' && deals++ === 0),
       turnTimerFactory: () => scenario === 'timer' ? new TurnTimer(2500) : new TurnTimer(),
     });
     let vite: Awaited<ReturnType<typeof createServer>> | undefined;
@@ -114,13 +114,13 @@ export const test = base.extend<Fixtures>({
       return peer;
     });
   },
-  createRoom: async ({ openPeer, peers }, provide) => {
+  createRoom: async ({ openPeer, peers, scenario }, provide) => {
     await provide(async (mode, { start = true } = {}) => {
       for (let seat = 0; seat < GAME_RULES[mode].playerCount; seat++) {
         const peer = await openPeer(), page = peer.page;
         await page.locator('.online-mode-entry').click();
         await expect(page.getByLabel('닉네임', { exact: true })).toBeEnabled();
-        await page.getByLabel('닉네임', { exact: true }).fill(`친구${seat}`);
+        await page.getByLabel('닉네임', { exact: true }).fill(scenario === 'history' ? `ABCDEFGHIJK${seat}` : `친구${seat}`);
         if (!seat) {
           await page.getByLabel('게임 모드', { exact: true }).selectOption(mode);
           await page.getByRole('button', { name: '방 만들기', exact: true }).click();

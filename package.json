@@ -22,7 +22,8 @@
     "start": "npm run start:server",
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install chromium",
-    "typecheck:e2e": "tsc -p tsconfig.e2e.json"
+    "typecheck:e2e": "tsc -p tsconfig.e2e.json",
+    "test:history": "tsx --tsconfig tsconfig.app.json --test tests/history.test.ts"
   },
   "dependencies": {
     "express": "^5.2.1",

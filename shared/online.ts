@@ -60,9 +60,9 @@ export type RoomView = { code: string; mode: GameMode; capacity: number; you: Se
   logs?: GameLogEntry[];
   // Server epoch milliseconds; display only. Connected seats have a null deadline.
   connections: { seat: Seat; nickname: string; ready: boolean; rematchReady: boolean; connected: boolean; reconnectDeadline: number | null }[];
-  game: GameView | null };
+  game: GameView | null; completedResult?: GameResultRecord | null };
 
-export type SpectatorRoomView = Omit<RoomView, "you"> & { role: "spectator"; you: null };
+export type SpectatorRoomView = Omit<RoomView, "you" | "completedResult"> & { role: "spectator"; you: null };
 
 export interface ClientEvents {
   "room:spectate": (request: { roomCode: string }, ack: Ack) => void;
@@ -88,3 +88,17 @@ export interface ServerEvents {
   "room:state": (view: RoomView) => void;
   "room:closed": (reason: string) => void;
 }
+
+export type GameResultRecord = {
+  version: 1;
+  id: string;
+  completedAt: string;
+  mode: GameMode;
+  round: number;
+  players: { seat: Seat; nickname: string }[];
+  winnerSeat: Seat | 'draw';
+  results: { seat: Seat; outcome: 'win' | 'loss' | 'draw'; score: number; goCount: number; payment: number; received: number }[];
+  specialEvents: { type: SpecialEvent; playerSeat: Seat; count: number }[];
+  settlement: SettlementResult | null;
+  gostopSettlement: GostopSettlementResult | null;
+};
