@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { MAX_CHAT_MESSAGE_LENGTH, type ChatState, type Reply } from '../../shared/online';
+import { QUICK_CHAT_PRESETS } from './quickChat';
 
 export type RoomChatProps = { roomCode: string | null; state: ChatState | null; enabled: boolean; send: (message: string) => Promise<Reply> };
 
@@ -16,24 +17,31 @@ function ChatPanel({ state, enabled, send }: Omit<RoomChatProps, 'roomCode'>) {
     : messages.length - messages.findIndex(m => m.id === read) - 1;
   const scroll = useRef<HTMLDivElement>(null);
   const nearBottom = useRef(true);
+  const sending = useRef(false);
   useLayoutEffect(() => {
     if (open && nearBottom.current && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
   }, [open, latest]);
-  async function submit() {
-    if (busy || !enabled || !text.trim()) return;
+  async function submit(message: string, clearDraft = false) {
+    if (sending.current || !enabled || !message.trim()) return;
+    sending.current = true;
     setBusy(true); setError('');
     try {
-      const reply = await send(text);
-      if (reply.ok) { setText(''); nearBottom.current = true; }
+      const reply = await send(message);
+      if (reply.ok) { if (clearDraft) setText(''); nearBottom.current = true; }
       else setError(reply.error);
     } catch { setError('전송을 확인하지 못했습니다. 중복 전송에 주의해 다시 시도해주세요.'); }
-    finally { setBusy(false); }
+    finally { sending.current = false; setBusy(false); }
   }
   return <aside className="room-chat" aria-label="방 채팅" data-open={open}>
     <button className="room-chat-toggle" type="button" aria-expanded={open} aria-controls="room-chat-panel" onClick={() => {
       setOpen(!open); setRead(latest); nearBottom.current = true;
     }}>{open ? '채팅 닫기' : `채팅${unread ? ` (${unread})` : ''}`}</button>
     {open && <section id="room-chat-panel" className="room-chat-panel">
+      <div className="room-chat-quick" role="group" aria-label="빠른 채팅">
+        {QUICK_CHAT_PRESETS.map(preset => <button key={preset.text} type="button"
+          aria-label={preset.label} disabled={!enabled || busy}
+          onClick={() => void submit(preset.text)}>{preset.text}</button>)}
+      </div>
       <div className="room-chat-messages" ref={scroll} aria-label="채팅 메시지" tabIndex={0} onScroll={e => {
         const el = e.currentTarget; nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
       }}>
@@ -43,7 +51,7 @@ function ChatPanel({ state, enabled, send }: Omit<RoomChatProps, 'roomCode'>) {
           <span>{message.type === 'system' ? '• ' : ''}{message.text}</span>
         </li>)}</ol>
       </div>
-      <form onSubmit={e => { e.preventDefault(); void submit(); }}>
+      <form onSubmit={e => { e.preventDefault(); void submit(text, true); }}>
         <label className="room-chat-label" htmlFor="room-chat-input">메시지 (한 줄, Enter로 전송)</label>
         <div className="room-chat-compose">
           <input id="room-chat-input" value={text} maxLength={MAX_CHAT_MESSAGE_LENGTH} autoComplete="off" disabled={!enabled || busy}
