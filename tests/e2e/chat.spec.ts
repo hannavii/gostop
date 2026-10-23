@@ -1,4 +1,57 @@
 import { test, expect, noOverflow, playTurn, startRoom, type Peer } from './fixtures';
+import { QUICK_CHAT_PRESETS } from '../../src/online/quickChat';
+
+for (const mode of ['matgo', 'gostop'] as const) {
+  test(`${mode}: quick chat uses ordinary user messages without changing game state`, async ({ createRoom, openPeer }) => {
+    const players = [...await createRoom(mode)];
+    const foreign = (await openPeer());
+    await foreign.page.locator('.online-mode-entry').click();
+    await foreign.page.getByLabel('닉네임', { exact: true }).fill('다른방');
+    await foreign.page.getByRole('button', { name: '방 만들기', exact: true }).click();
+    await expect(foreign.page.locator('.online-waiting-room')).toBeVisible();
+    const spectator = await openPeer();
+    await spectator.page.locator('.online-mode-entry').click();
+    await spectator.page.getByLabel('방 코드', { exact: true }).fill(players[0].view!.code);
+    await spectator.page.getByRole('button', { name: '관전하기', exact: true }).click();
+    await expect(spectator.page.getByTestId('spectator-board')).toBeVisible();
+    const all = [...players, spectator];
+    for (const peer of all) await openChat(peer);
+    const before = players.map(p => JSON.stringify(p.view));
+    const spectatorBefore = JSON.stringify(spectator.spectatorView);
+    const foreignBefore = JSON.stringify(foreign.chat);
+    for (const preset of QUICK_CHAT_PRESETS) {
+      await expect(players[0].page.getByRole('group', { name: '빠른 채팅' }).getByRole('button', { name: preset.label, exact: true })).toBeVisible();
+    }
+    const input = players[0].page.getByLabel('메시지 (한 줄, Enter로 전송)', { exact: true });
+    await input.fill('작성 중인 초안');
+    const sends = [[players[0], 'ㅋㅋㅋㅋ', 'ㅋㅋㅋㅋ'], [players[1], '😂', '기쁨의 눈물 얼굴'], [spectator, '👍', '엄지 올리기']] as const;
+    for (const [sender, text, label] of sends) {
+      const button = sender.page.getByRole('group', { name: '빠른 채팅' }).getByRole('button', { name: label, exact: true });
+      if (sender.page.viewportSize()!.width <= 412) await button.tap();
+      else { await button.focus(); await sender.page.keyboard.press('Enter'); }
+      for (const receiver of all) {
+        await expect(receiver.page.locator('.chat-user').filter({ hasText: text })).toHaveCount(1);
+        await expect.poll(() => receiver.chat?.messages.at(-1)?.text).toBe(text);
+        expect(receiver.chat!.messages.at(-1)!.type).toBe('user');
+      }
+      expect(await sender.page.locator('#room-chat-input').evaluate(el => el === document.activeElement)).toBe(false);
+    }
+    await expect(input).toHaveValue('작성 중인 초안');
+    expect(players.map(p => JSON.stringify(p.view))).toEqual(before);
+    expect(JSON.stringify(spectator.spectatorView)).toBe(spectatorBefore);
+    expect(JSON.stringify(foreign.chat)).toBe(foreignBefore);
+    const last = players[0].chat!.messages.at(-1)!;
+    expect(last.type === 'user' && last.sender).toEqual({ role: 'spectator', nickname: '관전자 1' });
+    for (const width of [360, 375, 390, 412]) {
+      await players[0].page.setViewportSize({ width, height: 844 });
+      await noOverflow(players[0].page);
+      const sizes = await players[0].page.locator('.room-chat-quick button').evaluateAll(buttons => buttons.map(b => b.getBoundingClientRect().height));
+      expect(sizes.every(height => height >= 44)).toBe(true);
+    }
+    for (const peer of all) await peer.page.getByRole('button', { name: '채팅 닫기' }).click();
+    await playTurn(players);
+  });
+}
 
 async function openChat(peer: Peer) {
   await peer.page.getByRole('button', { name: /^채팅(?: \(\d+\))?$/ }).click();

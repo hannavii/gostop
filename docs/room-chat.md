@@ -1,5 +1,13 @@
 # Room 채팅과 시스템 메시지
 
+## 빠른 채팅
+
+공통 채팅 패널은 `src/online/quickChat.ts`의 프리셋 10개(ㅋㅋㅋㅋ, 굿!, 잠깐만요, 고!, 나이스, 아깝다, 😭, 😂, 👍, 😎)를 제공한다. 모바일에서 키보드를 열지 않고 사용할 수 있도록 입력창 앞에 44px 이상 버튼을 두 줄로 배치한다. 데스크톱도 같은 작은 버튼 영역을 사용한다. 기존 접이식 패널, 자유 입력, 초안, 오류 표시를 유지한다.
+
+플레이어와 관전자 모두 같은 `send` 콜백으로 기존 `chat:send({ roomCode, message })`를 호출한다. 새 이벤트나 저장 구조, 서버 프리셋 허용 목록은 없다. 일반 채팅과 동일한 membership/역할 검사, 200 UTF-16 길이 제한, 입력 검증, 500ms cooldown 및 React 텍스트 렌더링이 적용된다. 전송 중 버튼은 비활성화하며 서버 오류는 기존 패널에 표시한다. 관전자 이름은 서버가 발급한다.
+
+퀵챗도 `user` 메시지이며 system message, game log, revision, turn deadline 등 게임 상태를 변경하지 않는다. 이모지는 preset만 제공하며 emoji picker나 새 dependency는 추가하지 않는다. 실제 button과 의미 있는 이모지 접근성 이름을 사용하여 Tab/Enter/Space 조작을 지원한다.
+
 채팅은 Match와 독립된 Room 메모리에 저장된다. `RoomChat`이 최근 `MAX_CHAT_HISTORY = 100`개를 순서대로 보관하며, 초과 시 오래된 메시지부터 제거한다. DB와 브라우저 저장소에는 저장하지 않는다. Room 삭제나 서버 재시작 시 사라지고 재대결에서는 유지된다.
 
 `ChatMessage`는 UUID `id`, 서버 ISO `createdAt`, `type`과 `text`를 가진다. `user` 메시지는 서버가 작성한 sender(닉네임, player/spectator role, 플레이어인 경우 seat)를 포함한다. `system` 메시지는 join/leave/disconnect/reconnect event를 포함한다. 토큰·소켓 ID·손패·서버 내부 객체는 포함하지 않는다.

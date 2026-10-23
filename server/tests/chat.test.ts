@@ -5,10 +5,12 @@ import type { AddressInfo } from 'node:net';
 import { io, type Socket } from 'socket.io-client';
 import { createOnlineServer } from '../app';
 import { RoomChat } from '../chat';
+import { QUICK_CHAT_PRESETS } from '../../src/online/quickChat';
 import { validateChat } from '../validation';
 import { CHAT_COOLDOWN_MS, MAX_CHAT_HISTORY, MAX_CHAT_MESSAGE_LENGTH, type ChatState, type ClientEvents, type ServerEvents, type ReconnectSession, type RoomView, type Reply } from '../../shared/online';
 
 test('chat validation rejects malformed, forged, Unicode and control input; HTML stays text', () => {
+  for (const { text } of QUICK_CHAT_PRESETS) assert.equal(validateChat({ roomCode: 'ABC123', message: text }).message, text);
   for (const input of [null, [], 2, 'text', {}, { roomCode: 'ABC123' },
     ...[null, {}, [], 1, '', '  ', 'x'.repeat(MAX_CHAT_MESSAGE_LENGTH + 1), '😀'.repeat(101), '\ntext', '\u0000', '\u202etext'].map(message => ({ roomCode: 'ABC123', message })),
     ...['nickname', 'seat', 'role', 'createdAt', 'type', '__proto__'].map(key => JSON.parse(`{"roomCode":"ABC123","message":"hi","${key}":"fake"}`)),
@@ -62,13 +64,15 @@ test('real sockets: isolation, authority, spam, spectator, reconnect and game in
   assert.equal(sent.type, 'user');
   if (sent.type === 'user') assert.deepEqual(sent.sender, { nickname: 'Alice', role: 'player', seat: 0 });
   assert.equal(sent.text, '<script>alert(1)</script>');
-  assert.equal((await a.socket.emitWithAck('chat:send', { roomCode: code, message: 'spam' })).ok, false);
+  for (const { text } of QUICK_CHAT_PRESETS) {
+    assert.equal((await a.socket.emitWithAck('chat:send', { roomCode: code, message: text })).ok, false);
+  }
   assert.equal((await b.socket.emitWithAck('chat:send', { roomCode: code, message: 'reply' })).ok, true);
   await a.socket.emitWithAck('room:ready', true); await b.socket.emitWithAck('room:ready', true); await a.socket.emitWithAck('room:start');
   const spectator = await peer();
   await spectator.socket.emitWithAck('room:spectate', { roomCode: code });
   const gameBefore = structuredClone(a.state.view), gamePackets = a.state.games;
-  assert.equal((await spectator.socket.emitWithAck('chat:send', { roomCode: code, message: 'watching' })).ok, true);
+  assert.equal((await spectator.socket.emitWithAck('chat:send', { roomCode: code, message: '👍' })).ok, true);
   // Barrier from this same server connection; chat never publishes a game snapshot.
   await spectator.socket.emitWithAck('room:list');
   assert.deepEqual(a.state.view, gameBefore); assert.equal(a.state.games, gamePackets);
