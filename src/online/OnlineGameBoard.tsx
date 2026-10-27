@@ -1,3 +1,4 @@
+import { beginnerHighlights } from "./beginnerHelp";
 import TurnCountdown from "./TurnCountdown";
 import GameLogPanel from './GameLogPanel';
 import ConnectionStatus, { ReconnectNotice } from "./ConnectionStatus";
@@ -22,6 +23,7 @@ type Props = {
 };
 export default function OnlineGameBoard({ room, game: latestGame, enabled, message, act, onRematch, onSync, onLeave, onHistory }: Props) {
   const { game, visual, animating } = usePresentation(latestGame, room.you);
+  const [helpVisible, setHelpVisible] = useState(false);
   const [detail, setDetail] = useState<Seat | null>(null);
   const [prompt, setPrompt] = useState<{ revision: number; cardId: string; type: "bomb" | "shake" } | null>(null);
   const specialPrompt = prompt?.revision === game.revision && game.canPlayHand &&
@@ -78,6 +80,7 @@ export default function OnlineGameBoard({ room, game: latestGame, enabled, messa
   const finished = game.phase === "finished";
   const activeConnected = room.connections[latestGame.turn].connected;
   const canAct = enabled && !animating && (latestGame.phase === "finished" || activeConnected);
+  const help = beginnerHighlights(game, room.you, !!room.beginnerHelpEnabled && helpVisible && canAct && !specialPrompt);
   const selected = detail === null ? null : game.players[detail];
   const result = game.result;
   const settlement = result?.settlement;
@@ -91,6 +94,7 @@ export default function OnlineGameBoard({ room, game: latestGame, enabled, messa
   return <main data-testid="online-board" data-seat={room.you} data-turn={latestGame.turn} data-revision={latestGame.revision} data-round={room.round} ref={boardRef} className={`game ${three ? "gostop3-game online-gostop-game" : "online-matgo-game"} ${animating ? "is-animating" : ""}`} style={GAME_SPEED_STYLE}>
     <nav className="online-game-toolbar" aria-label="방 정보">
       <RoomCode code={room.code} />
+      {room.beginnerHelpEnabled && <button type="button" aria-pressed={helpVisible} onClick={() => setHelpVisible(value => !value)}>{helpVisible ? "도움말 끄기" : "도움말 켜기"}</button>}
       {room.turnTimer && activeConnected && <TurnCountdown timer={room.turnTimer} name={room.connections[room.turnTimer.timedPlayerSeat].nickname} />}
       <span> {room.occupancy}/{room.capacity}명 · {three ? "3인 고스톱" : "2인 맞고"}</span>
       <button disabled={!enabled} onClick={onSync}>새로고침</button>
@@ -135,7 +139,7 @@ export default function OnlineGameBoard({ room, game: latestGame, enabled, messa
     </section>
     <MatgoTable className={three ? "gostop3-table" : undefined}
       ppeokLabels={three ? Object.fromEntries(game.ppeokStacks.map(stack => [stack.month, `${name(stack.owner)}가 만든 뻑`])) : undefined}
-      floorCards={game.floor} ppeokStacks={game.ppeokStacks.map(stack => ({ ...stack,
+      helpFloorIds={help.floorIds} floorCards={game.floor} ppeokStacks={game.ppeokStacks.map(stack => ({ ...stack,
       owner: stack.owner === room.you ? "player" : "opponent" }))}
       expandedPpeokMonth={expandedPpeokMonth} setExpandedPpeokMonth={setExpandedPpeokMonth}
       pendingChoice={myTurn && game.choice ? { matchingCards: game.choice } : null}
@@ -144,7 +148,7 @@ export default function OnlineGameBoard({ room, game: latestGame, enabled, messa
     <section className={`player-area${three ? " gostop3-player-area" : ""}`}>
       <h2>{room.you === room.host && <span aria-label="방장">👑 </span>}{name(room.you)} (나){myTurn && !finished && " ◀"}</h2>
       <ConnectionStatus player={room.connections[room.you]} />
-      <div data-testid="own-hand" className={`card-row${three ? " gostop3-player-hand" : ""}`} aria-label="내 손패">{game.hand.map(card => <Card key={card.id} card={card}
+      <div data-testid="own-hand" className={`card-row${three ? " gostop3-player-hand" : ""}`} aria-label="내 손패">{game.hand.map(card => <Card key={card.id} card={card} helpHighlighted={help.handIds.has(card.id)}
         onClick={canAct && game.canPlayHand && !specialPrompt ? () => {
           const option = game.specialOptions.find(option => option.cardId === card.id);
           if (option) setPrompt({ ...option, revision: game.revision });

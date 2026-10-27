@@ -16,7 +16,7 @@ export type ChatMessage = { id: string; createdAt: string } & (
 export type ChatState = { roomCode: string; messages: ChatMessage[] };
 export type ChatRequest = { roomCode: string; message: string };
 export type RoomVisibility = 'private' | 'public';
-export type CreateRoomRequest = { mode: GameMode; nickname: string; visibility: RoomVisibility };
+export type CreateRoomRequest = { mode: GameMode; nickname: string; visibility: RoomVisibility; beginnerHelpEnabled?: boolean };
 export type PublicRoomSummary = { roomCode: string; mode: GameMode; playerCount: number; maxPlayers: number };
 export type Seat = 0 | 1 | 2;
 export type GameLogEvent =
@@ -64,7 +64,7 @@ export type GameView = {
   result: { winner: Seat | "draw"; settlement: SettlementResult | null;
     gostopSettlement?: GostopSettlementResult } | null;
 };
-export type RoomView = { code: string; mode: GameMode; capacity: number; you: Seat; occupancy: number;
+export type RoomView = { beginnerHelpEnabled?: boolean; code: string; mode: GameMode; capacity: number; you: Seat; occupancy: number;
   host: Seat; round: number;
   turnTimer?: TurnTimerView | null;
   logs?: GameLogEntry[];

@@ -4,6 +4,7 @@ type CardProps = {
   card?: HwatuCard;
   isBack?: boolean;
   isSelectable?: boolean;
+  helpHighlighted?: boolean;
   onClick?: () => void;
 };
 
@@ -63,6 +64,7 @@ function Card({
   card,
   isBack = false,
   isSelectable = false,
+  helpHighlighted = false,
   onClick,
 }: CardProps) {
   if (isBack) {
@@ -79,6 +81,7 @@ function Card({
     "card",
     `card--${card.category}`,
     isSelectable ? "selectable" : "",
+    helpHighlighted ? "help-highlight" : "",
   ]
     .filter(Boolean)
     .join(" ");

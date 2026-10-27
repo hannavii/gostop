@@ -38,6 +38,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
   const [nickname, setNickname] = useState("");
   const [code, setCode] = useState(invite.code ?? "");
   const [mode, setMode] = useState<GameMode>("matgo");
+  const [beginnerHelpEnabled, setBeginnerHelpEnabled] = useState(false);
   const [visibility, setVisibility] = useState<RoomVisibility>('private');
   const [message, setMessage] = useState("서버에 연결하는 중입니다.");
 
@@ -218,8 +219,11 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
             onChange={event => setVisibility(event.target.value as RoomVisibility)}>
             <option value="private">비공개</option><option value="public">공개</option>
           </select>
+          <label className="online-beginner-option"><input type="checkbox" checked={beginnerHelpEnabled} disabled={!enabled}
+            onChange={event => setBeginnerHelpEnabled(event.target.checked)} />초보자 도움말 사용 가능</label>
+          <p className="online-beginner-description">게임 중 플레이 가능한 패와 대응되는 바닥패를 강조할 수 있습니다.</p>
           <button type="button" disabled={!enabled || !validNickname}
-            onClick={() => void request(s => s.timeout(5000).emitWithAck("room:create-options", { mode, nickname: nickname.trim(), visibility }))}>방 만들기</button>
+            onClick={() => void request(s => s.timeout(5000).emitWithAck("room:create-options", { mode, nickname: nickname.trim(), visibility, beginnerHelpEnabled }))}>방 만들기</button>
           <form onSubmit={event => {
             event.preventDefault();
             if (validNickname) void request(s => s.timeout(5000).emitWithAck("room:join", code.trim().toUpperCase(), nickname.trim()));

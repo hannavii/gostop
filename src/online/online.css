@@ -287,3 +287,13 @@
   .room-chat-messages { max-height: 100px; }
   .online-room-content :is(.go-stop-overlay, .game-over-overlay) { position: absolute; }
 }
+
+/* Outline leaves card geometry and hit targets unchanged, including ppeok stacks. */
+.game .card.help-highlight {
+  outline: 3px solid #ffd43b;
+  outline-offset: -3px;
+  box-shadow: 0 0 5px #ffd43b80;
+}
+.online-beginner-option { display: flex; align-items: center; gap: 8px; }
+.online-beginner-option input { width: auto; flex: none; }
+.online-beginner-description { font-size: .85rem; }

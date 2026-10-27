@@ -11,14 +11,14 @@ import { GAME_RULES, type GameMode } from '../../src/game/rules';
 import type { ChatState, RoomView, SpectatorRoomView } from '../../shared/online';
 import { settlementMatch } from '../settlement-fixture';
 
-type Scenario = 'history' | 'normal' | 'timer' | 'rematch' | 'reconnect' | 'reconnect-expiry' | 'settlement';
+type Scenario = 'beginner' | 'history' | 'normal' | 'timer' | 'rematch' | 'reconnect' | 'reconnect-expiry' | 'settlement';
 export type Peer = { page: Page; context: BrowserContext; view: RoomView | null; spectatorView?: SpectatorRoomView; chat?: ChatState };
 type Fixtures = {
   scenario: Scenario;
   site: string;
   peers: Peer[];
   openPeer: (url?: string) => Promise<Peer>;
-  createRoom: (mode: GameMode, options?: { start?: boolean }) => Promise<Peer[]>;
+  createRoom: (mode: GameMode, options?: { start?: boolean; beginnerHelpEnabled?: boolean }) => Promise<Peer[]>;
 };
 
 // Complete, non-overlapping fixed deal: first actions have no ambiguous matches.
@@ -77,7 +77,14 @@ export const test = base.extend<Fixtures>({
       reconnectGraceMs: scenario === 'reconnect-expiry' ? 1800 : scenario === 'reconnect' ? 12_000 : undefined,
       connectionPolicy: { allowedOrigins, allowMissingOrigin: false },
       matchFactory: (mode = "matgo") => scenario === 'settlement' && deals++ === 0
-        ? settlementMatch(mode) : fixedMatch(mode, scenario === 'history' || scenario === 'rematch' && deals++ === 0),
+        ? settlementMatch(mode) : (() => {
+          const match = fixedMatch(mode, scenario === 'history' || scenario === 'rematch' && deals++ === 0);
+          if (scenario === 'beginner') {
+            const hand = match.players[0].hand;
+            [hand[hand.length - 1], match.floor[0]] = [match.floor[0], hand[hand.length - 1]];
+          }
+          return match;
+        })(),
       turnTimerFactory: () => scenario === 'timer' ? new TurnTimer(2500) : new TurnTimer(),
     });
     let vite: Awaited<ReturnType<typeof createServer>> | undefined;
@@ -116,7 +123,7 @@ export const test = base.extend<Fixtures>({
     });
   },
   createRoom: async ({ openPeer, peers, scenario }, provide) => {
-    await provide(async (mode, { start = true } = {}) => {
+    await provide(async (mode, { start = true, beginnerHelpEnabled = false } = {}) => {
       for (let seat = 0; seat < GAME_RULES[mode].playerCount; seat++) {
         const peer = await openPeer(), page = peer.page;
         await page.locator('.online-mode-entry').click();
@@ -124,6 +131,7 @@ export const test = base.extend<Fixtures>({
         await page.getByLabel('닉네임', { exact: true }).fill(scenario === 'history' ? `ABCDEFGHIJK${seat}` : `친구${seat}`);
         if (!seat) {
           await page.getByLabel('게임 모드', { exact: true }).selectOption(mode);
+          if (beginnerHelpEnabled) await page.getByLabel('초보자 도움말 사용 가능', { exact: true }).check();
           await page.getByRole('button', { name: '방 만들기', exact: true }).click();
         } else {
           await page.getByLabel('방 코드', { exact: true }).fill(peers[0].view!.code);

@@ -16,6 +16,7 @@ type FloorDisplayItem =
     };
 type Props = {
  className?: string;
+ helpFloorIds?: ReadonlySet<string>;
  ppeokLabels?: Record<number, string>;
  floorCards: HwatuCard[]; ppeokStacks: PpeokStack[];
  expandedPpeokMonth: number | null;
@@ -26,7 +27,7 @@ type Props = {
  gameStarted: boolean; drawCount: number;
  handleFloorCardChoice: (card: HwatuCard) => void | Promise<void>;
 };
-export default function MatgoTable({className, ppeokLabels, floorCards,ppeokStacks,expandedPpeokMonth,setExpandedPpeokMonth,pendingChoice,pendingPlayedVisual,turnMessage,isAnimating,gameOver,gameStarted,drawCount,handleFloorCardChoice}: Props) {
+export default function MatgoTable({helpFloorIds, className, ppeokLabels, floorCards,ppeokStacks,expandedPpeokMonth,setExpandedPpeokMonth,pendingChoice,pendingPlayedVisual,turnMessage,isAnimating,gameOver,gameStarted,drawCount,handleFloorCardChoice}: Props) {
   const floorDisplayItems: FloorDisplayItem[] = [];
   const renderedPpeokMonths = new Set<number>();
 
@@ -115,7 +116,7 @@ export default function MatgoTable({className, ppeokLabels, floorCards,ppeokStac
                             "--ppeok-index": index,
                           } as CSSProperties}
                         >
-                          <Card card={stackCard} />
+                          <Card card={stackCard} helpHighlighted={helpFloorIds?.has(stackCard.id)} />
                         </div>
                       ))}
                     </div>
@@ -134,7 +135,7 @@ export default function MatgoTable({className, ppeokLabels, floorCards,ppeokStac
                       <div className="ppeok-stack-detail-cards">
                         {item.cards.map((stackCard) => (
                           <div key={stackCard.id} className="ppeok-detail-card">
-                            <Card card={stackCard} />
+                            <Card card={stackCard} helpHighlighted={helpFloorIds?.has(stackCard.id)} />
                           </div>
                         ))}
                       </div>
@@ -163,6 +164,7 @@ export default function MatgoTable({className, ppeokLabels, floorCards,ppeokStac
                   <Card
                     card={card}
                     isSelectable={isSelectable}
+                    helpHighlighted={helpFloorIds?.has(card.id)}
                     onClick={
                       isSelectable && !isAnimating && !gameOver
                         ? () => void handleFloorCardChoice(card)
