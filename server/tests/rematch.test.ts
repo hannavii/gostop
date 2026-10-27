@@ -27,7 +27,7 @@ async function harness(t: TestContext, options: Parameters<typeof createOnlineSe
     await new Promise<void>((resolve, reject) => { socket.once('connect', resolve); socket.once('connect_error', reject); }); return peer;
   };
   const room = async (mode: GameMode) => {
-    const host = await connect(); assert.equal((await host.socket.emitWithAck('room:create-mode', mode, 'Host')).ok, true);
+    const host = await connect(); assert.equal((await host.socket.emitWithAck('room:create-options', { mode, nickname: 'Host', visibility: 'private', beginnerHelpEnabled: true })).ok, true);
     const players = [host];
     for (let i = 1; i < GAME_RULES[mode].playerCount; i++) {
       const p = await connect(); assert.equal((await p.socket.emitWithAck('room:join', host.view!.code, `Guest${i}`)).ok, true); players.push(p);
@@ -51,6 +51,7 @@ async function finish(players: Peer[]) {
 }
 function assertFresh(players: Peer[]) {
   const first = players[0].view!, rule = GAME_RULES[first.mode];
+  assert.ok(players.every(p => p.view!.beginnerHelpEnabled === true));
   assert.equal(first.game!.phase, 'play'); assert.equal(first.game!.turn, 0);
   assert.equal(first.game!.floor.length, rule.floorSize); assert.equal(first.game!.drawCount, 48 - rule.handSize * rule.playerCount - rule.floorSize);
   assert.equal(first.game!.result, null); assert.equal(first.game!.choice, null);

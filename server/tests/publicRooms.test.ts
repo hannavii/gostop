@@ -162,3 +162,22 @@ test('malformed creation and list requests leave rooms and credentials unchanged
   assert.equal((await send(caller, 'room:create-options', { ...base, visibility: 'private' })).ok, false);
   await send(caller, 'room:sync'); assert.equal(JSON.stringify(caller.view), before);
 });
+
+
+test('beginner setting defaults false, rejects invalid wire values and survives resume', async t => {
+  const h = await setup(t), legacy = await h.create();
+  assert.equal(legacy.view!.beginnerHelpEnabled, false);
+  const base = { mode: 'matgo', nickname: 'Host', visibility: 'public' };
+  const caller = await h.connect();
+  for (const beginnerHelpEnabled of [null, 'true', 1, [], {}]) {
+    assert.equal((await send(caller, 'room:create-options', { ...base, beginnerHelpEnabled })).ok, false);
+    assert.equal(caller.view, null);
+  }
+  assert.equal((await send(caller, 'room:create-options', { ...base, beginnerHelpEnabled: true })).ok, true);
+  assert.equal(caller.view!.beginnerHelpEnabled, true);
+  const session = caller.session!;
+  caller.socket.disconnect();
+  const fresh = await h.connect();
+  assert.equal((await send(fresh, 'room:resume', session)).ok, true);
+  assert.equal(fresh.view!.beginnerHelpEnabled, true);
+});
