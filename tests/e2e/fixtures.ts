@@ -11,7 +11,7 @@ import { GAME_RULES, type GameMode } from '../../src/game/rules';
 import type { ChatState, RoomView, SpectatorRoomView } from '../../shared/online';
 import { settlementMatch } from '../settlement-fixture';
 
-type Scenario = 'beginner' | 'history' | 'normal' | 'timer' | 'rematch' | 'reconnect' | 'reconnect-expiry' | 'settlement';
+type Scenario = 'beginner-unmatched' | 'beginner' | 'history' | 'normal' | 'timer' | 'rematch' | 'reconnect' | 'reconnect-expiry' | 'settlement';
 export type Peer = { page: Page; context: BrowserContext; view: RoomView | null; spectatorView?: SpectatorRoomView; chat?: ChatState };
 type Fixtures = {
   scenario: Scenario;
