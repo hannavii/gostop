@@ -12,11 +12,23 @@ for (const mode of ['matgo', 'gostop'] as const) {
     await expect(page.locator('.help-highlight')).toHaveCount(0);
     const revision = host.view!.game!.revision;
     await page.getByRole('button', { name: '도움말 켜기', exact: true }).click();
-    await expect(page.getByTestId('own-hand').locator('.help-highlight')).toHaveCount(host.view!.game!.hand.length);
     const game = host.view!.game!;
+    const matchingHands = game.hand.filter(card => findSameMonthCards(card, game.floor).length > 0);
+    expect(matchingHands.length).toBeGreaterThan(0);
+    await expect(page.getByTestId('own-hand').locator('.help-highlight')).toHaveCount(matchingHands.length);
+    for (const [index, card] of game.hand.entries()) {
+      const button = page.getByTestId('own-hand').locator('button.card').nth(index);
+      await expect(button).toBeEnabled();
+      await expect(button).toHaveClass(matchingHands.includes(card) ? /help-highlight/ : /^(?!.*help-highlight)/);
+    }
     const floorIds = new Set(game.hand.flatMap(card => findSameMonthCards(card, game.floor).map(c => c.id)));
     expect(floorIds.size).toBeGreaterThan(0);
     await expect(page.locator('.floor-cards .help-highlight')).toHaveCount(floorIds.size);
+    for (const [index, card] of game.floor.entries()) {
+      await expect(page.locator('.floor-card-slot .card').nth(index)).toHaveClass(
+        floorIds.has(card.id) ? /help-highlight/ : /^(?!.*help-highlight)/);
+    }
+    expect(game.hand.some(card => findSameMonthCards(card, game.floor).length === 0)).toBe(true);
     const border = await page.getByTestId('own-hand').locator('.help-highlight').first().evaluate(card => {
       const style = getComputedStyle(card);
       return { color: style.outlineColor, width: style.outlineWidth };
@@ -48,11 +60,16 @@ for (const mode of ['matgo', 'gostop'] as const) {
     expect(observer.spectatorView!.game!.hand.length).toBe(0);
     const privateIds = players.flatMap(p => p.view!.game!.hand.map(card => card.id));
     expect(privateIds.every(id => !JSON.stringify(observer.spectatorView).includes(`"${id}"`))).toBe(true);
+    // The fixed deal's first card is unmatched: help must not prevent submitting it.
+    expect(findSameMonthCards(game.hand[0], game.floor)).toHaveLength(0);
+    await expect(page.getByTestId('own-hand').locator('button.card').first()).not.toHaveClass(/help-highlight/);
     await playTurn(players);
     await settled(host);
     await expect(page.locator('.help-highlight')).toHaveCount(0);
     await settled(players[1]);
-    await expect(players[1].page.getByTestId('own-hand').locator('.help-highlight')).toHaveCount(players[1].view!.game!.hand.length);
+    const next = players[1].view!.game!;
+    const nextMatches = next.hand.filter(card => findSameMonthCards(card, next.floor).length > 0);
+    await expect(players[1].page.getByTestId('own-hand').locator('.help-highlight')).toHaveCount(nextMatches.length || next.hand.length);
     await page.reload();
     await expect(page.getByTestId('online-board')).toBeVisible();
     expect(host.view!.beginnerHelpEnabled).toBe(true);
@@ -66,6 +83,32 @@ test('default room has no help toggle', async ({ createRoom }) => {
   for (const peer of peers) {
     expect(peer.view!.beginnerHelpEnabled).toBe(false);
     await expect(peer.page.getByRole('button', { name: /도움말/ })).toHaveCount(0);
+  }
+});
+
+test.describe('unmatched playable hands', () => {
+  test.use({ scenario: 'beginner-unmatched' });
+  for (const mode of ['matgo', 'gostop'] as const) {
+    test(`${mode}: dropping a playable hand card adds no floor highlights and advances play`, async ({ createRoom }) => {
+      const peers = await createRoom(mode, { beginnerHelpEnabled: true });
+      const host = peers[0], page = host.page;
+      await settled(host);
+      const game = host.view!.game!;
+      expect(game.canPlayHand).toBe(true);
+      expect(game.hand.every(card => findSameMonthCards(card, game.floor).length === 0)).toBe(true);
+      await page.getByRole('button', { name: '도움말 켜기', exact: true }).click();
+      await expect(page.getByTestId('own-hand').locator('.help-highlight')).toHaveCount(game.hand.length);
+      await expect(page.locator('.floor-cards .help-highlight')).toHaveCount(0);
+      for (const width of [360, 375, 390, 412, 1440]) {
+        await page.setViewportSize({ width, height: width === 1440 ? 900 : 844 });
+        await noOverflow(page);
+      }
+      await playTurn(peers);
+      await settled(host);
+      expect(host.view!.game!.revision).toBeGreaterThan(game.revision);
+      expect(host.view!.game!.turn).toBe(1);
+      await expect(page.locator('.help-highlight')).toHaveCount(0);
+    });
   }
 });
 
