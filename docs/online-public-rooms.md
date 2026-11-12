@@ -2,7 +2,13 @@
 
 방 공개 설정의 기본값은 **비공개**다. 기존 `room:create`와 `room:create-mode` 요청도 계속 비공개 방을 만든다. 비공개 방은 기존 방 코드와 초대 URL로 참가한다. 생성 후 공개 여부를 변경하는 기능은 없다.
 
-새 클라이언트는 `room:create-options`에 `{ mode, nickname, visibility }`를 보낸다. visibility는 `private` 또는 `public`만 허용한다. 서버는 Issue #16 검증 계층으로 객체 필드와 각 값을 검사하며, 잘못된 요청은 방을 생성하지 않는다.
+새 클라이언트는 기존 `room:create-options`에 `{ mode, nickname, visibility, beginnerHelpEnabled, roomTitle }`를 보낸다. visibility는 `private` 또는 `public`만 허용한다. 서버는 Issue #16 검증 계층으로 객체 필드와 각 값을 검사하며, 잘못된 요청은 방을 생성하지 않는다.
+
+`roomTitle`은 생성 시 정하고 이후 수정할 수 없는 서버 authoritative Room metadata다. 앞뒤 공백을 제거한 뒤 **1~40 UTF-16 code units**를 허용한다. JavaScript 문자열 길이와 HTML `maxlength` 기준이며, 일반 이모지는 보통 2단위를 사용한다. 문자열만 허용하고 빈 제목, 줄바꿈, 제어 문자 및 채팅과 동일한 일부 숨김·방향 제어 문자를 거부한다. 검증 전 원문은 최대 1024단위로 제한한다. 길이 상수는 `shared/online.ts`, 클라이언트·서버 공통 검증은 `shared/roomTitle.ts`에서 관리한다. HTML 문자열은 React 텍스트로 표시하며 실행하지 않는다.
+
+제목은 공개방 카드와 참가자의 대기실, 관전 화면에서 표시한다. 비공개 제목은 공개 목록에 포함하지 않으며, 정상 참가·관전한 사용자만 Room state로 받는다. 제목은 게임 상태·revision·타이머·로그에 영향을 주지 않는다. 방 코드와 초대 URL에는 제목을 추가하지 않고, reconnect token이나 sessionStorage에도 별도 저장하지 않는다. 재접속·게임 시작·재대결 후에도 같은 서버 Room의 제목을 유지하며 서버 재시작 시 기존 in-memory Room과 함께 사라진다.
+
+배포는 **backend 먼저, frontend 다음** 순서로 진행한다. 새 backend는 `roomTitle`이 생략된 구버전 요청과 기존 `room:create`·`room:create-mode`에 공유 기본 제목을 적용한다. 명시적으로 보낸 빈 값·null 등은 거부한다. 새 frontend는 구버전 Room state/summary에서 제목이 없을 때 기본 제목을 표시한다. 다만 구버전 backend의 strict 추가 필드 검증은 새 frontend의 `roomTitle`을 거부하므로 frontend를 먼저 배포하면 방 생성이 실패할 수 있다. 실패 시 제목을 몰래 버리고 재요청하는 fallback은 없다.
 
 공개 목록은 다음 조건을 모두 만족하는 방만 포함한다.
 
@@ -11,7 +17,7 @@
 - 실제 멤버 수가 정원보다 적고 1명 이상인 방
 - grace 만료 처리를 기다리는 멤버가 없는 유효한 방
 
-목록은 서버의 생성 sequence가 큰 순서, 즉 최신순이다. 공개 summary에는 `roomCode`, `mode`, `playerCount`, `maxPlayers` 네 필드만 들어간다. 닉네임, 비공개 방 정보, token/hash, socket ID, 준비 상태, 게임 상태와 내부 timer는 포함하지 않는다.
+목록은 서버의 생성 sequence가 큰 순서, 즉 최신순이다. 공개 summary에는 `roomCode`, `roomTitle`, `mode`, `playerCount`, `maxPlayers` 다섯 필드만 들어간다. 닉네임, 비공개 방 정보, token/hash, socket ID, 준비 상태, 게임 상태와 내부 timer는 포함하지 않는다.
 
 클라이언트는 시작 화면 진입 시와 수동 새로고침 시 `room:list`를 요청한다. 서버는 같은 이름의 이벤트로 summary 배열을 보내고 기존 ACK 형태로 성공/실패를 응답한다. 요청 payload는 없으며 추가 인자는 거부한다. 목록 조회는 멤버·게임·로그를 변경하지 않는다.
 

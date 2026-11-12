@@ -5,6 +5,8 @@ import type { AddressInfo } from 'node:net';
 import { io, type Socket } from 'socket.io-client';
 import { createOnlineServer } from '../app';
 import type { PublicRoomSummary, ReconnectSession, Reply, RoomView } from '../../shared/online';
+import { DEFAULT_ROOM_TITLE, ROOM_TITLE_MAX_LENGTH } from '../../shared/online';
+import { validateCreateRoom } from '../validation';
 
 type Peer = { socket: Socket; view: RoomView | null; session: ReconnectSession | null; changes: number; lists: number };
 function event(socket: Socket, name: string): Promise<unknown[]> {
@@ -27,9 +29,9 @@ async function setup(t: TestContext, reconnectGraceMs = 60_000) {
     socket.on('room:list-changed', () => p.changes++); socket.on('room:list', () => p.lists++);
     await event(socket, 'connect'); return p;
   }
-  async function create(mode: 'matgo' | 'gostop' = 'matgo', visibility: 'private' | 'public' = 'public') {
+  async function create(mode: 'matgo' | 'gostop' = 'matgo', visibility: 'private' | 'public' = 'public', roomTitle = DEFAULT_ROOM_TITLE) {
     const p = await connect();
-    assert.equal((await send(p, 'room:create-options', { mode, nickname: 'HostSecret', visibility })).ok, true);
+    assert.equal((await send(p, 'room:create-options', { mode, nickname: 'HostSecret', visibility, roomTitle })).ok, true);
     return p;
   }
   return { connect, create };
@@ -53,8 +55,8 @@ test('legacy creation is private; summary is exact, minimal and newest first', a
   const a = await h.create(), b = await h.create('gostop');
   const rooms = await list(observer);
   assert.deepEqual(rooms, [
-    { roomCode: b.view!.code, mode: 'gostop', playerCount: 1, maxPlayers: 3 },
-    { roomCode: a.view!.code, mode: 'matgo', playerCount: 1, maxPlayers: 2 },
+    { roomCode: b.view!.code, roomTitle: DEFAULT_ROOM_TITLE, mode: 'gostop', playerCount: 1, maxPlayers: 3 },
+    { roomCode: a.view!.code, roomTitle: DEFAULT_ROOM_TITLE, mode: 'matgo', playerCount: 1, maxPlayers: 2 },
   ]);
   assert.equal(observer.changes, 2);
   const wire = JSON.stringify(rooms);
@@ -63,7 +65,9 @@ test('legacy creation is private; summary is exact, minimal and newest first', a
   }
   for (const p of [legacy, legacyMode, privateHost]) assert.ok(!wire.includes(p.view!.code));
   assert.ok(!wire.includes('HostSecret'));
-  for (const room of rooms) assert.deepEqual(Object.keys(room).sort(), ['maxPlayers', 'mode', 'playerCount', 'roomCode']);
+  for (const room of rooms) assert.deepEqual(Object.keys(room).sort(), ['maxPlayers', 'mode', 'playerCount', 'roomCode', 'roomTitle']);
+  assert.equal(legacy.view!.roomTitle, DEFAULT_ROOM_TITLE);
+  assert.equal(legacyMode.view!.roomTitle, DEFAULT_ROOM_TITLE);
   assert.deepEqual(a.view!.logs, []); assert.deepEqual(b.view!.logs, []);
 });
 
@@ -180,4 +184,42 @@ test('beginner setting defaults false, rejects invalid wire values and survives 
   const fresh = await h.connect();
   assert.equal((await send(fresh, 'room:resume', session)).ok, true);
   assert.equal(fresh.view!.beginnerHelpEnabled, true);
+});
+
+test('room title validation trims text, counts UTF-16 units and only defaults omitted fields', () => {
+  const base = { mode: 'matgo', nickname: 'Host', visibility: 'public' };
+  assert.equal(validateCreateRoom(base).roomTitle, DEFAULT_ROOM_TITLE);
+  for (const roomTitle of ['초보 환영 같이 쳐요', 'Game 123', '한'.repeat(ROOM_TITLE_MAX_LENGTH),
+    '😀'.repeat(ROOM_TITLE_MAX_LENGTH / 2), '👨‍👩‍👧‍👦 환영', '<script>alert(1)</script>', '  앞뒤 공백  ']) {
+    assert.equal(validateCreateRoom({ ...base, roomTitle }).roomTitle, roomTitle.trim());
+  }
+  for (const roomTitle of ['', '   ', undefined, null, 123, true, [], {}, 'x'.repeat(ROOM_TITLE_MAX_LENGTH + 1),
+    '😀'.repeat(ROOM_TITLE_MAX_LENGTH / 2) + 'x', 'a\nb', 'a\rb', '\t제목', 'a\u0000b', 'a\u007fb', 'a\u2028b', 'a\u2029b', 'a\u202eb']) {
+    assert.throws(() => validateCreateRoom({ ...base, roomTitle }));
+  }
+});
+
+test('invalid title payloads create no room or credentials; public/private titles stay isolated and survive resume', async t => {
+  const h = await setup(t), observer = await h.connect(), caller = await h.connect();
+  const base = { mode: 'matgo', nickname: 'Host', visibility: 'public' };
+  for (const roomTitle of ['', ' ', null, 12, false, [], {}, 'x'.repeat(ROOM_TITLE_MAX_LENGTH + 1), 'a\nb', 'a\u0000b']) {
+    assert.equal((await send(caller, 'room:create-options', { ...base, roomTitle })).ok, false);
+    assert.equal(caller.view, null); assert.equal(caller.session, null);
+    assert.deepEqual(await list(observer), []);
+  }
+  const secret = await h.create('gostop', 'private', '비공개 제목 비밀');
+  const host = await h.create('gostop', 'public', '  초보 환영 같이 쳐요  ');
+  assert.equal(host.view!.roomTitle, '초보 환영 같이 쳐요');
+  const summaries = await list(observer), wire = JSON.stringify(summaries);
+  assert.equal(summaries.length, 1);
+  assert.equal(summaries[0].roomTitle, host.view!.roomTitle);
+  assert.ok(!wire.includes(secret.view!.code) && !wire.includes(secret.view!.roomTitle!));
+  await send(caller, 'room:join', secret.view!.code, 'Guest');
+  assert.equal(caller.view!.roomTitle, secret.view!.roomTitle);
+  const session = host.session!;
+  host.socket.disconnect();
+  const fresh = await h.connect();
+  assert.equal((await send(fresh, 'room:resume', session)).ok, true);
+  assert.equal(fresh.view!.roomTitle, host.view!.roomTitle);
+  assert.equal((await list(observer))[0].roomTitle, host.view!.roomTitle);
 });
