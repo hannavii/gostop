@@ -1,8 +1,21 @@
 .mode-select-page.online-mode-select { height: 100dvh; min-height: 0; overflow-y: auto; align-items: flex-start; }
-.online-mode-select .mode-select-content { margin: auto; }
-.online-mode-entry { width: 100%; padding: 18px 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #ffffff40; border-radius: 14px; background: #ffffff12; color: white; cursor: pointer; }
+.online-mode-select .mode-select-content { margin: auto; width: min(680px, 100%); gap: 24px; }
+.home-online-primary { width: 100%; padding: 32px; border: 1px solid #ffdf9c90; border-radius: 18px; background: #174c36; box-shadow: 0 12px 32px #10382630; }
+.home-online-label { color: #ffdf9c; font-size: 12px; font-weight: 700; }
+.home-online-primary h2 { margin: 12px 0; font-size: 30px; }
+.home-online-primary > p { margin: 0 0 24px; line-height: 1.6; color: #e0ebe3; }
+.online-mode-entry { width: 100%; min-height: 64px; padding: 18px 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #ffdf9c; border-radius: 12px; background: #ffdf9c; color: #174c36; cursor: pointer; }
 .online-mode-entry strong { font-size: 22px; }
-.online-mode-entry:hover { background: #ffffff22; }
+.online-mode-entry:hover { background: #ffeabd; }
+.home-online-primary .home-online-features { margin: 14px 0 0; font-size: 12px; color: #c4d8ca; }
+.home-ai-secondary { width: 100%; border-top: 1px solid #ffffff30; padding-top: 20px; }
+.home-ai-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 12px; }
+.home-ai-heading h2 { margin: 0; font-size: 16px; }
+.home-ai-heading p { margin: 0; font-size: 13px; color: #d0e2d6; }
+.home-ai-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.home-ai-button { min-height: 48px; padding: 12px; border: 1px solid #ffffff50; border-radius: 10px; background: transparent; color: white; font: inherit; font-size: 14px; cursor: pointer; }
+.home-ai-button:hover { background: #ffffff12; }
+.online-mode-select button:focus-visible { outline: 3px solid white; outline-offset: 4px; }
 .online-page { height: 100dvh; overflow-y: auto; padding: 20px; background: #174c36; color: white; }
 .online-page button { border: 0; border-radius: 8px; padding: 10px 16px; cursor: pointer; }
 .online-page button:disabled { opacity: .45; cursor: default; }
@@ -51,7 +64,9 @@
   }
   .online-mode-select .mode-select-content { min-width: 0; width: 100%; }
   .online-mode-select .mode-select-title h1 { font-size: clamp(24px, 7vw, 36px); }
-  .online-mode-select .mode-card-list { grid-template-columns: minmax(0, 1fr); }
+  .online-mode-select .mode-select-content { gap: 20px; }
+  .home-online-primary { padding: 22px; }
+  .home-online-primary h2 { font-size: 25px; }
   .online-mode-entry { padding: 16px; }
   .online-mode-entry strong { font-size: 18px; }
   .online-header { gap: 8px; }
