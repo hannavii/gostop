@@ -4,7 +4,8 @@ import RecentGames from './RecentGames';
 import { savePlayerResult } from './recentGameHistory';
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
-import { NICKNAME_MAX_LENGTH } from "../../shared/online";
+import { DEFAULT_ROOM_TITLE, NICKNAME_MAX_LENGTH, ROOM_TITLE_MAX_LENGTH } from "../../shared/online";
+import { roomTitleError } from '../../shared/roomTitle';
 import RoomCode from "./RoomCode";
 import SpectatorGameBoard from "./SpectatorGameBoard";
 import OnlineGameBoard from "./OnlineGameBoard";
@@ -36,6 +37,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
   const [spectatorRoom, setSpectatorRoom] = useState<SpectatorRoomView | null>(null);
   const [room, setRoom] = useState<RoomView | null>(null);
   const [nickname, setNickname] = useState("");
+  const [roomTitle, setRoomTitle] = useState(DEFAULT_ROOM_TITLE);
   const [code, setCode] = useState(invite.code ?? "");
   const [mode, setMode] = useState<GameMode>("matgo");
   const [beginnerHelpEnabled, setBeginnerHelpEnabled] = useState(false);
@@ -167,6 +169,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
   const enabled = connected && !busy && !restoring;
   const displayedMessage = [message, storageWarning].filter(Boolean).join(" ");
   const validNickname = nickname.trim().length > 0 && nickname.trim().length <= NICKNAME_MAX_LENGTH;
+  const titleError = roomTitleError(roomTitle);
   if (showHistory) return <RecentGames onBack={() => setShowHistory(false)} />;
   const chatCode = room?.code ?? spectatorRoom?.code ?? null;
   const chatProps = { roomCode: chatCode, state: chat, enabled: connected && !restoring,
@@ -210,6 +213,12 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
             <input id="online-nickname" value={nickname} maxLength={NICKNAME_MAX_LENGTH} autoComplete="nickname"
               placeholder="1~12자 닉네임" disabled={!enabled} onChange={event => setNickname(event.target.value)} />
           </label>
+          <label className="online-title-label" htmlFor="online-room-title">방 제목</label>
+          <input className="online-title-input" id="online-room-title" value={roomTitle} maxLength={ROOM_TITLE_MAX_LENGTH}
+            placeholder="초보 환영! 같이 쳐요" disabled={!enabled} aria-invalid={!!titleError}
+            aria-describedby="online-room-title-help" onChange={event => setRoomTitle(event.target.value)} />
+          <p id="online-room-title-help" className="online-title-help" role={titleError ? 'alert' : undefined}>
+            {titleError ?? `최대 ${ROOM_TITLE_MAX_LENGTH}자 · 한 줄로 입력해주세요.`}</p>
           <label htmlFor="online-mode">게임 모드 </label>
           <select id="online-mode" value={mode} disabled={!enabled} onChange={event => setMode(event.target.value as GameMode)}>
             <option value="matgo">2인 맞고</option><option value="gostop">3인 고스톱</option>
@@ -222,8 +231,8 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
           <label className="online-beginner-option"><input type="checkbox" checked={beginnerHelpEnabled} disabled={!enabled}
             onChange={event => setBeginnerHelpEnabled(event.target.checked)} />초보자 도움말 사용 가능</label>
           <p className="online-beginner-description">게임 중 플레이 가능한 패와 대응되는 바닥패를 강조할 수 있습니다.</p>
-          <button type="button" disabled={!enabled || !validNickname}
-            onClick={() => void request(s => s.timeout(5000).emitWithAck("room:create-options", { mode, nickname: nickname.trim(), visibility, beginnerHelpEnabled }))}>방 만들기</button>
+          <button type="button" disabled={!enabled || !validNickname || !!titleError}
+            onClick={() => void request(s => s.timeout(5000).emitWithAck("room:create-options", { mode, nickname: nickname.trim(), visibility, beginnerHelpEnabled, roomTitle: roomTitle.trim() }))}>방 만들기</button>
           <form onSubmit={event => {
             event.preventDefault();
             if (validNickname) void request(s => s.timeout(5000).emitWithAck("room:join", code.trim().toUpperCase(), nickname.trim()));
@@ -243,6 +252,7 @@ export default function OnlineMatgo({ onBack }: { onBack: () => void }) {
       ) : (
         <section className="online-lobby online-waiting-room">
           <h2>온라인 {room.mode === "gostop" ? "3인 고스톱" : "2인 맞고"}</h2>
+          <h3 className="online-room-title">{room.roomTitle ?? DEFAULT_ROOM_TITLE}</h3>
           <RoomCode code={room.code} invite />
           <ReconnectNotice connections={room.connections} />
           <h3>플레이어 <small>{room.occupancy}/{room.capacity}명</small></h3>

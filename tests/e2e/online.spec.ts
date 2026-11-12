@@ -83,7 +83,8 @@ test.describe('stable server settlement fixture', () => {
   test.use({ scenario: 'rematch' });
   for (const mode of ['matgo', 'gostop'] as GameMode[]) {
     test(`${mode}: unanimous rematch preserves identities and resets the game`, async ({ createRoom, site }) => {
-      const peers = await createRoom(mode), before = peers.map(p => p.view!);
+      const roomTitle = '재대결 후에도 같은 방 🎴';
+      const peers = await createRoom(mode, { roomTitle }), before = peers.map(p => p.view!);
       await peers[0].page.getByRole('button', { name: 'STOP', exact: true }).click();
       for (const peer of peers) {
         await expect(peer.page.locator('.game-over-modal')).toBeVisible();
@@ -100,6 +101,7 @@ test.describe('stable server settlement fixture', () => {
       await peers[1].page.getByRole('button', { name: '다시하기 취소', exact: true }).click();
       await peers[0].page.goto(site);
       await expect(peers[0].page.locator('.game-over-modal')).toBeVisible();
+      expect(peers[0].view!.roomTitle).toBe(roomTitle);
       await expect(peers[1].page.getByTestId('reconnect-notice')).toHaveCount(0);
       await peers[0].page.getByRole('button', { name: '다시하기', exact: true }).click();
       await expect.poll(() => peers.every(p => p.view!.connections[0].rematchReady)).toBe(true);
@@ -109,6 +111,7 @@ test.describe('stable server settlement fixture', () => {
       expect(peers.every(p => p.view!.logs!.length === 1 && p.view!.logs![0].type === 'start' && p.view!.logs![0].round === 2)).toBe(true);
       for (let seat = 0; seat < peers.length; seat++) {
         const peer = peers[seat], view = peer.view!, game = view.game!;
+        expect(view.roomTitle).toBe(roomTitle);
         expect(view.code === before[seat].code && view.you === seat).toBe(true);
         expect(view.connections.every((p, i) => p.nickname === before[seat].connections[i].nickname && !p.rematchReady)).toBe(true);
         expect(game.phase).toBe('play'); expect(game.turn).toBe(0);

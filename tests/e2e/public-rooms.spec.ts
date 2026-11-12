@@ -1,18 +1,24 @@
 import { test, expect, noOverflow, playTurn, startRoom, type Peer } from './fixtures';
+import { ROOM_TITLE_MAX_LENGTH } from '../../shared/online';
+
+const publicTitle = '초보 환영 같이 쳐요';
 
 async function enter(peer: Peer, nickname = '') {
   await peer.page.locator('.online-mode-entry').click();
   await expect(peer.page.getByLabel('닉네임', { exact: true })).toBeEnabled();
   if (nickname) await peer.page.getByLabel('닉네임', { exact: true }).fill(nickname);
 }
-async function create(peer: Peer, mode: 'matgo' | 'gostop' = 'matgo', isPublic = true) {
+async function create(peer: Peer, mode: 'matgo' | 'gostop' = 'matgo', isPublic = true, roomTitle = publicTitle) {
   await enter(peer, '공개방장');
   await expect(peer.page.getByLabel('방 공개 설정', { exact: true })).toHaveValue('private');
   await peer.page.getByLabel('게임 모드', { exact: true }).selectOption(mode);
+  await peer.page.getByLabel('방 제목', { exact: true }).fill(roomTitle);
   if (isPublic) await peer.page.getByLabel('방 공개 설정', { exact: true }).selectOption('public');
   await peer.page.getByRole('button', { name: '방 만들기', exact: true }).click();
   await expect(peer.page.locator('.online-waiting-room')).toBeVisible();
   await expect.poll(() => !!peer.view).toBe(true);
+  expect(peer.view!.roomTitle).toBe(roomTitle.trim());
+  await expect(peer.page.locator('.online-waiting-room .online-room-title')).toHaveText(roomTitle.trim());
 }
 const row = (peer: Peer, code: string) => peer.page.getByTestId('public-room').filter({ has: peer.page.getByText(code, { exact: true }) });
 const list = (peer: Peer) => peer.page.getByTestId('public-rooms');
@@ -27,6 +33,7 @@ for (const mode of ['matgo', 'gostop'] as const) {
     const observer = await openPeer(); await enter(observer);
     await expect(list(observer)).toContainText('현재 참가 가능한 공개방이 없습니다.');
     const host = await openPeer(); await create(host, mode); const code = host.view!.code;
+    await expect(row(observer, code).locator('.online-room-title')).toHaveText(publicTitle);
     await expect(row(observer, code)).toContainText(mode === 'matgo' ? '2인 맞고' : '3인 고스톱');
     await expect(row(observer, code)).toContainText(`1 / ${mode === 'matgo' ? 2 : 3}`);
     await expect(row(observer, code)).not.toContainText('공개방장');
@@ -46,6 +53,7 @@ for (const mode of ['matgo', 'gostop'] as const) {
       await row(guest, code).getByRole('button').click();
       await expect(guest.page.locator('.online-waiting-room')).toBeVisible();
       await expect.poll(() => guest.view?.you).toBe(seat); players.push(guest);
+      expect(guest.view!.roomTitle).toBe(publicTitle);
       await noOverflow(guest.page);
       if (mode === 'gostop' && seat === 1) await expect(row(observer, code)).toContainText('2 / 3');
     }
@@ -59,20 +67,24 @@ for (const mode of ['matgo', 'gostop'] as const) {
     await guest.page.reload(); await expect(guest.page.getByTestId('online-board')).toBeVisible();
     expect(guest.view!.code).toBe(identity.code); expect(guest.view!.you).toBe(identity.seat);
     expect(guest.view!.connections[identity.seat].nickname).toBe(identity.name);
+    expect(guest.view!.roomTitle).toBe(publicTitle);
     await expect(list(guest)).toHaveCount(0); expect(listRequests).toBe(0);
   });
 }
 
 test('private default stays undiscoverable while code/invite joins and invite priority work', async ({ openPeer }) => {
   const publicHost = await openPeer(); await create(publicHost);
-  const host = await openPeer(); await create(host, 'gostop', false);
+  const privateTitle = '비공개 친구들의 방';
+  const host = await openPeer(); await create(host, 'gostop', false, privateTitle);
   const observer = await openPeer(); await enter(observer);
   await expect(row(observer, publicHost.view!.code)).toBeVisible();
   await expect(row(observer, host.view!.code)).toHaveCount(0);
+  await expect(list(observer)).not.toContainText(privateTitle);
   await observer.page.getByLabel('닉네임', { exact: true }).fill('코드친구');
   await observer.page.getByLabel('방 코드', { exact: true }).fill(host.view!.code);
   await observer.page.getByRole('button', { name: '참가하기', exact: true }).click();
   await expect(observer.page.locator('.online-waiting-room')).toBeVisible();
+  expect(observer.view!.roomTitle).toBe(privateTitle);
   const invite = await host.page.getByLabel('초대 링크', { exact: true }).inputValue();
   const guest = await openPeer(invite);
   await expect(guest.page.getByLabel('방 코드', { exact: true })).toHaveValue(host.view!.code);
@@ -81,8 +93,50 @@ test('private default stays undiscoverable while code/invite joins and invite pr
   await guest.page.getByRole('button', { name: '참가하기', exact: true }).click();
   await expect(guest.page.locator('.online-waiting-room')).toBeVisible();
   expect(guest.view!.code).toBe(host.view!.code);
+  expect(guest.view!.roomTitle).toBe(privateTitle);
   await guest.page.reload(); await expect(guest.page.locator('.online-waiting-room')).toBeVisible();
   await expect(list(guest)).toHaveCount(0); expect(guest.view!.you).toBe(2);
+  expect(guest.view!.roomTitle).toBe(privateTitle);
+});
+
+test('title input validation, long title layout and literal HTML rendering', async ({ openPeer }) => {
+  const host = await openPeer(); await enter(host, '제목방장');
+  const input = host.page.getByLabel('방 제목', { exact: true });
+  await expect(input).toHaveAttribute('maxlength', String(ROOM_TITLE_MAX_LENGTH));
+  await input.fill('   ');
+  await expect(input).toHaveAttribute('aria-invalid', 'true');
+  await expect(host.page.locator('#online-room-title-help')).toContainText('방 제목');
+  await expect(host.page.getByRole('button', { name: '방 만들기', exact: true })).toBeDisabled();
+  const longTitle = '긴'.repeat(ROOM_TITLE_MAX_LENGTH);
+  await input.fill(longTitle);
+  for (const width of [360, 375, 390, 412, 1440]) {
+    await host.page.setViewportSize({ width, height: width === 1440 ? 900 : 844 });
+    await noOverflow(host.page);
+    await expect(input).toBeVisible();
+    await host.page.getByRole('button', { name: '방 만들기', exact: true }).scrollIntoViewIfNeeded();
+    await expect(host.page.getByRole('button', { name: '방 만들기', exact: true })).toBeInViewport();
+  }
+  await host.page.getByLabel('방 공개 설정', { exact: true }).selectOption('public');
+  await host.page.getByRole('button', { name: '방 만들기', exact: true }).click();
+  await expect(host.page.locator('.online-waiting-room')).toBeVisible();
+  const observer = await openPeer(); await enter(observer, '목록친구');
+  const card = row(observer, host.view!.code);
+  await expect(card.locator('.online-room-title')).toHaveText(longTitle);
+  for (const width of [360, 375, 390, 412, 1440]) {
+    await observer.page.setViewportSize({ width, height: width === 1440 ? 900 : 844 });
+    await publicLayout(observer);
+    const titleBounds = await card.locator('.online-room-title').boundingBox();
+    const buttonBounds = await card.getByRole('button').boundingBox();
+    expect(titleBounds && buttonBounds && (titleBounds.x + titleBounds.width <= buttonBounds.x ||
+      titleBounds.y + titleBounds.height <= buttonBounds.y)).toBeTruthy();
+    await card.getByRole('button').scrollIntoViewIfNeeded();
+    await expect(card.getByRole('button')).toBeInViewport();
+  }
+  const html = '<script>alert(1)</script>';
+  const htmlHost = await openPeer(); await create(htmlHost, 'matgo', true, html);
+  await expect(row(observer, htmlHost.view!.code).locator('.online-room-title')).toHaveText(html);
+  await expect(row(observer, htmlHost.view!.code).locator('script')).toHaveCount(0);
+  await expect(htmlHost.page.locator('.online-waiting-room script')).toHaveCount(0);
 });
 
 test('explicit lobby leave removes public room and returns to a refreshed list', async ({ openPeer }) => {

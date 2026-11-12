@@ -17,6 +17,8 @@ for (const mode of ['matgo', 'gostop'] as const) {
     await expect(page.getByTestId('own-hand')).toHaveCount(0);
     const privateIds = players.flatMap(p => p.view!.game!.hand.map(card => card.id));
     await expect.poll(() => !!observer.spectatorView).toBe(true);
+    expect(observer.spectatorView!.roomTitle).toBe(players[0].view!.roomTitle);
+    await expect(page.locator('.online-room-title')).toHaveText(players[0].view!.roomTitle!);
     expect(privateIds.every(id => !JSON.stringify(observer.spectatorView).includes(`"${id}"`))).toBe(true);
     const domIds = await page.locator('.card').evaluateAll(cards => cards.map(card =>
       `${parseInt(card.querySelector('.card-month')!.textContent!)}-${card.querySelector('.card-index')!.textContent!.trim()}`));

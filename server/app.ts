@@ -1,6 +1,6 @@
 import { RoomChat } from './chat';
 import { validateChat } from './validation';
-import { CHAT_COOLDOWN_MS } from '../shared/online';
+import { CHAT_COOLDOWN_MS, DEFAULT_ROOM_TITLE } from '../shared/online';
 import { RequestError, REQUEST_FAILED, record, validRoomCode, validateCreateRoom, validateNickname, validateReconnect, validateRematch } from './validation';
 import { createGameResult } from './gameResult';
 import { TurnTimer } from "./turnTimer";
@@ -19,7 +19,7 @@ type Spectator = { nickname: string; socketId: string | null; tokenHash: Buffer;
 export const RECONNECT_GRACE_MS = 60_000;
 type Member = { nickname: string; ready: boolean; rematchReady: boolean; socketId: string | null; tokenHash: Buffer; deadline: number | null;
   timer: ReturnType<typeof setTimeout> | null };
-type Room = { readonly beginnerHelpEnabled: boolean; chat: RoomChat; spectatorSequence: number; completedResult?: import('../shared/online').GameResultRecord | null; code: string; mode: GameMode; visibility: RoomVisibility; createdSequence: number; members: Member[]; spectators: Spectator[]; host: Member | null; match: Match | null; round: number; turnTimer: TurnTimer; log: GameLog };
+type Room = { readonly roomTitle: string; readonly beginnerHelpEnabled: boolean; chat: RoomChat; spectatorSequence: number; completedResult?: import('../shared/online').GameResultRecord | null; code: string; mode: GameMode; visibility: RoomVisibility; createdSequence: number; members: Member[]; spectators: Spectator[]; host: Member | null; match: Match | null; round: number; turnTimer: TurnTimer; log: GameLog };
 const hashToken = (token: string) => createHash("sha256").update(token).digest();
 
 export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matchFactory = createMatch,
@@ -60,7 +60,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       room.members.length > 0 && room.members.length < GAME_RULES[room.mode].playerCount &&
       room.members.every(member => member.deadline === null || member.deadline > now))
       .sort((a, b) => b.createdSequence - a.createdSequence)
-      .map(room => ({ roomCode: room.code, mode: room.mode, playerCount: room.members.length,
+      .map(room => ({ roomCode: room.code, roomTitle: room.roomTitle, mode: room.mode, playerCount: room.members.length,
         maxPlayers: GAME_RULES[room.mode].playerCount }));
   }
   function notifyPublicRooms() {
@@ -101,7 +101,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
     for (const spectator of room.spectators) {
       if (!spectator.socketId) continue;
       io.to(spectator.socketId).emit("room:spectator-state", {
-        beginnerHelpEnabled: room.beginnerHelpEnabled, code: room.code, role: "spectator", you: null, round: room.round,
+        roomTitle: room.roomTitle, beginnerHelpEnabled: room.beginnerHelpEnabled, code: room.code, role: "spectator", you: null, round: room.round,
         mode: room.mode, capacity: GAME_RULES[room.mode].playerCount, occupancy: room.members.length,
         host: room.members.indexOf(room.host!) as Seat, turnTimer: room.turnTimer.view, logs: room.log.entries,
         connections: room.members.map((m, seat) => ({ seat: seat as Seat, nickname: m.nickname, ready: m.ready,
@@ -123,7 +123,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       if (!member.socketId) return;
       // Never broadcast raw Room/Match, even to members of the same room.
       io.to(member.socketId).emit("room:state", {
-        beginnerHelpEnabled: room.beginnerHelpEnabled, completedResult: room.completedResult ?? null, code: room.code, round: room.round, turnTimer: room.turnTimer.view, logs: room.log.entries, you: seat as Seat, occupancy: room.members.length,
+        roomTitle: room.roomTitle, beginnerHelpEnabled: room.beginnerHelpEnabled, completedResult: room.completedResult ?? null, code: room.code, round: room.round, turnTimer: room.turnTimer.view, logs: room.log.entries, you: seat as Seat, occupancy: room.members.length,
         host: room.members.indexOf(room.host!) as Seat,
         mode: room.mode, capacity: GAME_RULES[room.mode].playerCount,
         connections: room.members.map((m, i) => ({ seat: i as Seat, nickname: m.nickname, ready: m.ready, rematchReady: m.rematchReady, connected: m.socketId !== null, reconnectDeadline: m.deadline })),
@@ -294,14 +294,14 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
       room.chat.system(name, 'join');
       publishChat(room);
     }
-    function createRoom(mode: GameMode, input: string, visibility: RoomVisibility = 'private', beginnerHelpEnabled = false) {
+    function createRoom(mode: GameMode, input: string, visibility: RoomVisibility = 'private', beginnerHelpEnabled = false, roomTitle = DEFAULT_ROOM_TITLE) {
       if (mode !== "matgo" && mode !== "gostop") throw new RequestError("지원하지 않는 게임 모드입니다.");
       requireLobby();
       const name = validateNickname(input);
       if (rooms.size >= 1000) throw new RequestError("현재 생성 가능한 방이 가득 찼습니다.");
       let code: string;
       do { code = randomInt(0, 36 ** 6).toString(36).toUpperCase().padStart(6, "0"); } while (rooms.has(code));
-      const room: Room = { beginnerHelpEnabled, chat: new RoomChat(), spectatorSequence: 0, code, mode, visibility, createdSequence: ++roomSequence, members: [], spectators: [], host: null, match: null, round: 0, turnTimer: turnTimerFactory(), log: new GameLog(code) };
+      const room: Room = { roomTitle, beginnerHelpEnabled, chat: new RoomChat(), spectatorSequence: 0, code, mode, visibility, createdSequence: ++roomSequence, members: [], spectators: [], host: null, match: null, round: 0, turnTimer: turnTimerFactory(), log: new GameLog(code) };
       rooms.set(code, room);
       addMember(room, name);
       publish(room);
@@ -352,7 +352,7 @@ export function createOnlineServer({ reconnectGraceMs = RECONNECT_GRACE_MS, matc
     socket.on("room:create-mode", (mode, name, ack) => handle(ack, 'room:create-mode', () => createRoom(mode, name)));
     socket.on('room:create-options', (input, ack) => handle(ack, 'room:create-options', () => {
       const options = validateCreateRoom(input);
-      createRoom(options.mode, options.nickname, options.visibility, options.beginnerHelpEnabled);
+      createRoom(options.mode, options.nickname, options.visibility, options.beginnerHelpEnabled, options.roomTitle);
     }));
     socket.on('room:list', ack => handle(ack, 'room:list', () => {
       socket.emit('room:list', publicRooms());

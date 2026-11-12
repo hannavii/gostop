@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { ClientEvents, PublicRoomSummary, ServerEvents } from '../../shared/online';
+import { DEFAULT_ROOM_TITLE } from '../../shared/online';
 
 export default function PublicRoomList({ getSocket, connected, enabled, validNickname, onJoin }: {
   getSocket: () => Socket<ServerEvents, ClientEvents> | null;
@@ -57,7 +58,8 @@ export default function PublicRoomList({ getSocket, connected, enabled, validNic
     {!validNickname && <p>닉네임을 입력하면 공개방에 참가할 수 있습니다.</p>}
     {!error && <ul className="online-public-list">
       {rooms.map(room => <li key={room.roomCode} data-testid="public-room" data-room-code={room.roomCode}>
-        <div><strong>{room.mode === 'gostop' ? '3인 고스톱' : '2인 맞고'}</strong>
+        <div><strong className="online-room-title">{room.roomTitle ?? DEFAULT_ROOM_TITLE}</strong>
+          <span>{room.mode === 'gostop' ? '3인 고스톱' : '2인 맞고'}</span>
           <span className="online-public-code">{room.roomCode}</span></div>
         <span aria-label="참가 인원">{room.playerCount} / {room.maxPlayers}</span>
         <button type="button" disabled={!enabled || loading || !validNickname}

@@ -1,4 +1,5 @@
-import { MAX_CHAT_MESSAGE_LENGTH, NICKNAME_MAX_LENGTH } from '../shared/online';
+import { DEFAULT_ROOM_TITLE, MAX_CHAT_MESSAGE_LENGTH, NICKNAME_MAX_LENGTH } from '../shared/online';
+import { roomTitleError } from '../shared/roomTitle';
 import type { CreateRoomRequest, ReconnectSession, RematchRequest } from '../shared/online';
 
 // Only these deliberate, user-facing failures may cross the socket boundary.
@@ -56,9 +57,14 @@ export function validateRematch(input: unknown): RematchRequest {
 
 export function validateCreateRoom(input: unknown): CreateRoomRequest {
   const message = '잘못된 방 생성 요청입니다.';
-  const a = record(input, ['mode', 'nickname', 'visibility', 'beginnerHelpEnabled'], message);
+  const a = record(input, ['mode', 'nickname', 'visibility', 'beginnerHelpEnabled', 'roomTitle'], message);
   if (a.mode !== 'matgo' && a.mode !== 'gostop') throw new RequestError('지원하지 않는 게임 모드입니다.');
   if (a.visibility !== 'private' && a.visibility !== 'public') throw new RequestError('잘못된 방 공개 설정입니다.');
   if (a.beginnerHelpEnabled !== undefined && typeof a.beginnerHelpEnabled !== 'boolean') throw new RequestError(message);
-  return { mode: a.mode, nickname: validateNickname(a.nickname), visibility: a.visibility, beginnerHelpEnabled: a.beginnerHelpEnabled ?? false };
+  // Only omission supports old clients; explicit empty or malformed titles fail.
+  const roomTitle = Object.hasOwn(a, 'roomTitle') ? a.roomTitle : DEFAULT_ROOM_TITLE;
+  const titleError = roomTitleError(roomTitle);
+  if (titleError) throw new RequestError(titleError);
+  return { mode: a.mode, nickname: validateNickname(a.nickname), visibility: a.visibility, beginnerHelpEnabled: a.beginnerHelpEnabled ?? false,
+    roomTitle: (roomTitle as string).trim() };
 }

@@ -21,6 +21,7 @@ export default function SpectatorGameBoard({ room, enabled, message, onLeave }: 
     data-round={room.round} data-revision={game.revision}>
     <nav className="online-game-toolbar" aria-label="관전 정보">
       <strong>관전 중</strong><RoomCode code={room.code} />
+      {room.roomTitle && <span className="online-room-title">{room.roomTitle}</span>}
       <span>{room.mode === 'gostop' ? '3인 고스톱' : '2인 맞고'} · 플레이어 {room.occupancy}/{room.capacity}명</span>
       <button type="button" disabled={!enabled} onClick={onLeave}>방 나가기</button>
       {room.turnTimer && <TurnCountdown timer={room.turnTimer} name={name(room.turnTimer.timedPlayerSeat)} />}

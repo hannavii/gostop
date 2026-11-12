@@ -27,7 +27,7 @@ for (const mode of ['matgo', 'gostop'] as const) test(`${mode}: spectator privac
     const c = await connect(); c.on('room:state', v => { views[i] = v; });
     c.on('room:session', v => { playerSessions[i] = v; });
     assert.equal((i ? await c.emitWithAck('room:join', views[0].code, `p${i}`)
-      : await c.emitWithAck('room:create-options', { mode, nickname: 'host', visibility: 'public' })).ok, true);
+      : await c.emitWithAck('room:create-options', { mode, nickname: 'host', visibility: 'public', roomTitle: '관전 가능한 방' })).ok, true);
     await c.emitWithAck('room:ready', true);
   }
   const code = views[0].code;
@@ -51,6 +51,7 @@ for (const mode of ['matgo', 'gostop'] as const) test(`${mode}: spectator privac
   assert.equal(JSON.stringify(views[0]), before);
   assert.equal(watched.you, null); assert.equal(watched.capacity, count); assert.equal(watched.occupancy, count);
   function privacy() {
+    assert.equal(watched.roomTitle, '관전 가능한 방');
     const wire = JSON.stringify(watched);
     for (const card of [...match.players.flatMap(p => p.hand), ...match.pile]) assert.ok(!wire.includes(`"id":"${card.id}"`));
     for (const key of ['token', 'tokenHash', 'socketId', 'pending', 'generation', 'pile', 'deadline', 'timer', 'privateServerObject']) {
