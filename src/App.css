@@ -2944,9 +2944,6 @@ strong {
 
 @media (max-width: 700px) {
   /* Keep AI boards within the viewport without shrinking card hit areas. */
-  .game:not(.online-matgo-game):not(.online-gostop-game) {
-    grid-template-columns: minmax(0, 1fr);
-  }
   .game:not(.online-matgo-game):not(.online-gostop-game) .card-row {
     max-width: 100%;
     overflow-x: auto;
@@ -3619,6 +3616,97 @@ strong {
   font-size: 8px;
   line-height: 1.4;
   opacity: 0.58;
+}
+
+/* AI captured panels participate in layout on phones instead of covering play. */
+@media (max-width: 700px) {
+  .ai-game {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 64px 10px 10px;
+    min-height: 0;
+  }
+  .ai-game.ai-game--gostop { padding-top: 96px; }
+  .ai-game > .captured-panel {
+    position: relative;
+    inset: auto;
+    transform: none;
+    grid-row: 1;
+    grid-column: span 3;
+    width: 100%;
+    min-width: 0;
+    height: 148px;
+    max-height: 20dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 6px;
+    background: #174c36;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .ai-game--gostop > .captured-panel { grid-column: span 2; }
+  .ai-game[data-started="false"] > .captured-panel { display: none; }
+  .ai-game .captured-panel-header {
+    position: sticky;
+    top: -6px;
+    z-index: 1;
+    gap: 4px;
+    margin-bottom: 5px;
+    padding: 4px 0;
+    background: #174c36;
+  }
+  .ai-game .captured-panel-header strong { min-width: 0; font-size: 11px; overflow-wrap: anywhere; }
+  .ai-game .captured-panel-header span { flex-shrink: 0; font-size: 10px; }
+  .ai-game .captured-groups { gap: 4px; }
+  .ai-game .captured-row { grid-template-columns: 20px minmax(0, 1fr); min-height: 28px; }
+  .ai-game .captured-card-stack { flex-wrap: wrap; gap: 3px; }
+  .ai-game .captured-mini-card { width: 27px; height: 36px; }
+  .ai-game .captured-mini-card + .captured-mini-card { margin-left: 0; }
+  .ai-game .captured-badges { margin-top: 5px; gap: 3px; }
+  .ai-game .captured-panel-detail-hint { font-size: 10px; overflow-wrap: anywhere; }
+  .ai-game .captured-score { position: sticky; bottom: -6px; z-index: 1; margin-top: 5px; padding: 4px 0; background: #174c36; }
+  .ai-game .captured-score strong { font-size: 16px; }
+  .ai-game > :is(.opponent-area, .gostop3-opponents-area) { grid-row: 2; grid-column: 1 / -1; width: 100%; min-width: 0; gap: 8px; }
+  .ai-game .gostop3-opponent-zone { min-width: 0; gap: 4px; }
+  .ai-game :is(.opponent-area, .gostop3-opponents-area, .player-area) h2 { margin: 0; font-size: 15px; }
+  .ai-game :is(.opponent-area, .gostop3-opponent-zone, .player-area) p { font-size: 10px; overflow-wrap: anywhere; }
+  .ai-game > .table { grid-row: 3; grid-column: 1 / -1; min-width: 0; min-height: 0; justify-content: flex-start; overflow-y: auto; }
+  .ai-game .table h2 { margin: 0; font-size: 15px; }
+  .ai-game .table-content { width: 100%; min-height: auto; align-items: flex-start; gap: 8px; }
+  .ai-game .floor-cards { flex: 1; min-width: 0; grid-template-columns: repeat(auto-fit, minmax(52px, 1fr)); gap: 8px 4px; justify-items: center; }
+  .ai-game .draw-pile-area { flex: 0 0 48px; width: 48px; position: sticky; top: 0; }
+  .ai-game > .player-area { grid-row: 4; grid-column: 1 / -1; min-width: 0; gap: 4px; }
+  .ai-game .card-row { min-width: 0; max-width: 100%; overflow-x: auto; }
+  .ai-game .turn-message { position: static; transform: none; max-width: 100%; margin: 0; padding: 4px 8px; font-size: 11px; white-space: normal; overflow-wrap: anywhere; }
+  .ai-game--gostop > .turn-message { position: absolute; top: 60px; left: 10px; right: 10px; }
+  .ai-game .choice-message { position: static; transform: none; margin: 0; max-width: 100%; font-size: 11px; }
+  .ai-game .captured-panel:focus-visible { outline: 3px solid #ffdf9c; outline-offset: -3px; }
+  .ai-game .flying-card--player-play { animation-name: ai-player-play; }
+  .ai-game .flying-card--opponent-play { animation-name: ai-opponent-play; }
+  .ai-game :is(.flying-card--player-draw, .flying-card--opponent-draw) { animation-name: ai-draw; }
+  .ai-game .capture-flight { animation-name: ai-capture; --ai-target-x: var(--ai-capture-player-x); --ai-target-y: var(--ai-capture-player-y); }
+  .ai-game .capture-flight--opponent { --ai-target-x: var(--ai-capture-opponent-x); --ai-target-y: var(--ai-capture-opponent-y); }
+  .ai-game .gostop3-capture-flight--1 { --ai-target-x: var(--ai-capture-opponent1-x); --ai-target-y: var(--ai-capture-opponent1-y); }
+  .ai-game .gostop3-capture-flight--2 { --ai-target-x: var(--ai-capture-opponent2-x); --ai-target-y: var(--ai-capture-opponent2-y); }
+}
+
+@keyframes ai-player-play {
+  from { left: var(--ai-hand-x); top: var(--ai-hand-y); transform: translate(-50%, -50%) scale(.92); }
+  to { left: var(--ai-floor-x); top: var(--ai-floor-y); transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes ai-opponent-play {
+  from { left: var(--ai-opponent-x); top: var(--ai-opponent-y); transform: translate(-50%, -50%) scale(.92); }
+  to { left: var(--ai-floor-x); top: var(--ai-floor-y); transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes ai-draw {
+  from { left: var(--ai-draw-x); top: var(--ai-draw-y); transform: translate(-50%, -50%) scale(.92); }
+  to { left: var(--ai-floor-x); top: var(--ai-floor-y); transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes ai-capture {
+  from { left: var(--ai-floor-x); top: var(--ai-floor-y); transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  to { left: var(--ai-target-x); top: var(--ai-target-y); transform: translate(-50%, -50%) scale(.45); opacity: .15; }
 }
 
 .gostop3-settlement-note {

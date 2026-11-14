@@ -11,6 +11,7 @@ import {
 import "./App.css";
 
 import Card from "./components/Card";
+import { useAiLayoutAnchors } from './components/useAiLayoutAnchors';
 import CapturedCardsModal from "./components/CapturedCardsModal";
 import { hwatuCards } from "./data/cards";
 import { dealCards } from "./game/deal";
@@ -1202,9 +1203,13 @@ function MatgoGame() {
   const detailBombCount =
     capturedDetailTarget === "player" ? playerBombCount : opponentBombCount;
 
+  const boardRef = useAiLayoutAnchors(gameStarted);
+
   return (
     <main
-      className={`game ${isAnimating ? "is-animating" : ""}`}
+      ref={boardRef}
+      className={`game ai-game ai-game--matgo ${isAnimating ? "is-animating" : ""}`}
+      data-started={gameStarted}
       style={GAME_SPEED_STYLE}
     >
       {specialEffect && <div className="special-effect">{specialEffect}</div>}

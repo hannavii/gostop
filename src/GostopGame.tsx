@@ -8,6 +8,7 @@ import {
 import "./App.css";
 
 import Card from "./components/Card";
+import { useAiLayoutAnchors } from './components/useAiLayoutAnchors';
 import CapturedCardsModal from "./components/CapturedCardsModal";
 import { hwatuCards } from "./data/cards";
 import { dealGostopCards } from "./game/deal";
@@ -206,7 +207,7 @@ function getSpecialEventName(event: GostopSpecialEvent) {
   }
 }
 
-function CapturedPanel({
+export function CapturedPanel({
   title,
   cards,
   score,
@@ -1750,11 +1751,15 @@ function GostopGame() {
         ? opponent1BombCount
         : opponent2BombCount;
 
+  const boardRef = useAiLayoutAnchors(gameStarted, currentPlayer);
+
   return (
     <main
-      className={`game gostop3-game ${
+      ref={boardRef}
+      className={`game ai-game ai-game--gostop gostop3-game ${
         isProcessing ? "is-animating" : ""
       }`}
+      data-started={gameStarted}
       style={GAME_SPEED_STYLE}
     >
       {specialEffect && (
