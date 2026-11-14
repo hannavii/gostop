@@ -331,6 +331,8 @@ function CapturedPanel({
 }
 
 function GostopGame() {
+  const [gameStarted, setGameStarted] = useState(false);
+  const gameStartedRef = useRef(false);
   const [playerCards, setPlayerCards] = useState<HwatuCard[]>([]);
   const [opponent1Cards, setOpponent1Cards] = useState<HwatuCard[]>([]);
   const [opponent2Cards, setOpponent2Cards] = useState<HwatuCard[]>([]);
@@ -350,7 +352,7 @@ function GostopGame() {
     useState<SpecialActionPrompt | null>(null);
   const [capturedDetailTarget, setCapturedDetailTarget] =
     useState<PlayerIndex | null>(null);
-  const [turnMessage, setTurnMessage] = useState("");
+  const [turnMessage, setTurnMessage] = useState("게임 시작 버튼을 눌러주세요.");
   const [isProcessing, setIsProcessing] = useState(false);
 
   const [flyingCard, setFlyingCard] = useState<FlyingCardState | null>(null);
@@ -842,13 +844,15 @@ function GostopGame() {
     setIsProcessing(false);
     setCurrentPlayer(0);
     setTurnMessage("내 차례입니다. 카드를 한 장 선택하세요.");
+    setGameStarted(true);
   };
 
-  useEffect(() => {
+  const handleInitialStart = () => {
+    // Synchronous guard also covers repeated clicks before React commits.
+    if (gameStartedRef.current) return;
+    gameStartedRef.current = true;
     startGame();
-    // 최초 진입 시 한 번만 실행합니다.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  };
 
   const finishGame = (winner: PlayerIndex) => {
     const winnerScore = calculateScore(
@@ -1227,6 +1231,7 @@ function GostopGame() {
 
   const handlePlayerCard = async (card: HwatuCard) => {
     if (
+      !gameStarted ||
       currentPlayer !== 0 ||
       isProcessing ||
       pendingChoice ||
@@ -1423,7 +1428,7 @@ function GostopGame() {
   ========================= */
 
   const runAiTurn = async (aiIndex: 1 | 2) => {
-    if (gameOver) return;
+    if (!gameStarted || gameOver) return;
 
     setIsProcessing(true);
     setTurnMessage(`상대 ${aiIndex}가 카드를 고르는 중...`);
@@ -1628,6 +1633,7 @@ function GostopGame() {
 
   useEffect(() => {
     if (
+      !gameStarted ||
       currentPlayer === 0 ||
       isProcessing ||
       pendingChoice ||
@@ -1648,6 +1654,7 @@ function GostopGame() {
     // 상태 전환을 기준으로 AI를 한 번만 실행합니다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    gameStarted,
     currentPlayer,
     isProcessing,
     pendingChoice,
@@ -2021,14 +2028,25 @@ function GostopGame() {
         </div>
       )}
 
-      <button
+      {!gameStarted ? <button
+        key="initial-start"
+        type="button"
+        className="start-button gostop3-restart-button"
+        onClick={handleInitialStart}
+      >
+        게임 시작
+      </button> : <button
+        key="restart"
         type="button"
         className="gostop3-restart-button"
-        onClick={startGame}
+        onClick={event => {
+          // A double-click on Start must not hit the newly rendered Restart.
+          if (event.detail < 2) startGame();
+        }}
         disabled={isProcessing || showGoStop || Boolean(specialActionPrompt)}
       >
         다시 시작
-      </button>
+      </button>}
 
       <div className="turn-message">{turnMessage}</div>
 
@@ -2074,7 +2092,7 @@ function GostopGame() {
         <div className="gostop3-opponent-zone">
           <h2>
             상대 1
-            {currentPlayer === 1 && !gameOver && " ◀"}
+            {gameStarted && currentPlayer === 1 && !gameOver && " ◀"}
           </h2>
 
           <div className="card-row gostop3-opponent-hand">
@@ -2092,7 +2110,7 @@ function GostopGame() {
         <div className="gostop3-opponent-zone">
           <h2>
             상대 2
-            {currentPlayer === 2 && !gameOver && " ◀"}
+            {gameStarted && currentPlayer === 2 && !gameOver && " ◀"}
           </h2>
 
           <div className="card-row gostop3-opponent-hand">
@@ -2247,7 +2265,7 @@ function GostopGame() {
       <section className="player-area gostop3-player-area">
         <h2>
           내 패
-          {currentPlayer === 0 && !gameOver && " ◀"}
+          {gameStarted && currentPlayer === 0 && !gameOver && " ◀"}
         </h2>
 
         {currentPlayer === 0 && playerBombPassCount > 0 && !gameOver && (
@@ -2267,6 +2285,7 @@ function GostopGame() {
               key={card.id}
               card={card}
               onClick={
+                gameStarted &&
                 currentPlayer === 0 &&
                 !pendingChoice &&
                 !specialActionPrompt &&

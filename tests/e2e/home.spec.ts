@@ -44,14 +44,14 @@ test('online primary section precedes accessible AI actions at every viewport', 
 });
 
 for (const mode of ['matgo', 'gostop'] as const) {
-  test(`${mode}: AI entry retains its existing start behavior`, async ({ openPeer }) => {
+  test(`${mode}: AI entry waits for an explicit start`, async ({ openPeer }) => {
     const { page } = await openPeer();
     await page.getByRole('button', { name: mode === 'matgo' ? 'AI 2인 맞고' : 'AI 3인 고스톱', exact: true }).click();
     await expect(page.locator('main.game')).toBeVisible();
+    await expect(page.getByRole('button', { name: '게임 시작', exact: true })).toBeVisible();
+    await expect(page.locator('.player-area .card')).toHaveCount(0);
+    await page.getByRole('button', { name: '게임 시작', exact: true }).click();
     if (mode === 'matgo') {
-      await expect(page.getByRole('button', { name: '게임 시작', exact: true })).toBeVisible();
-      await expect(page.locator('.player-area .card')).toHaveCount(0);
-      await page.getByRole('button', { name: '게임 시작', exact: true }).click();
       await expect(page.locator('.player-area .card')).toHaveCount(10);
     } else {
       await expect(page.locator('.gostop3-player-hand .card')).toHaveCount(7);
