@@ -240,6 +240,7 @@
 ========================= */
 
 .start-button {
+  min-height: 44px;
   position: fixed;
 
   top: 10px;
@@ -2910,6 +2911,7 @@ strong {
 ========================================= */
 
 .gostop3-restart-button {
+  min-height: 44px;
   position: fixed;
   top: 10px;
   left: 145px;
@@ -2932,6 +2934,24 @@ strong {
 .gostop3-restart-button:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+.start-button:focus-visible,
+.gostop3-restart-button:focus-visible {
+  outline: 3px solid #ffdf9c;
+  outline-offset: 3px;
+}
+
+@media (max-width: 700px) {
+  /* Keep AI boards within the viewport without shrinking card hit areas. */
+  .game:not(.online-matgo-game):not(.online-gostop-game) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .game:not(.online-matgo-game):not(.online-gostop-game) .card-row {
+    max-width: 100%;
+    overflow-x: auto;
+    justify-content: flex-start;
+  }
 }
 
 /* =========================================
